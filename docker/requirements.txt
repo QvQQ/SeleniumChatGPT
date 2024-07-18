@@ -1,0 +1,8 @@
+setuptools
+undetected_chromedriver
+rich
+filelock
+pyperclip
+python-box
+flask
+tenacity

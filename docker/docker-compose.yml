@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  selenium-gpt:
+    image: leviosa/selenium-gpt:latest
+    shm_size: '2g'
+    container_name: SeleniumGPT
+    restart: no
+    ports:
+      - "7900:7900"    # noVNC
+      - "15001:15001"  # SeleniumChatGPTServer service listen port
+    environment:
+      - PORT=15001
+
