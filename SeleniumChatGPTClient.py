@@ -128,14 +128,15 @@ class SeleniumChatGPTClient:
         else:
             self._handle_response(response)
 
-    def regenerate(self):
+    def regenerate(self) -> str:
         try:
             response = requests.post(f"{self._base_url}/regenerate", timeout=self._timeout)
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
         else:
-            self._handle_response(response)
+            data = self._handle_response(response)
+            return data.data.answer
 
 
 if __name__ == '__main__':
@@ -221,11 +222,19 @@ if __name__ == '__main__':
                     )
 
                 elif command == "/regenerate":
-                    client.regenerate()
+                    answer = client.regenerate()
                     console.print(
                         Panel.fit(
                             "[bold cyan]🔄 Regenerated the last response. Here we go again! 🎉🔁[/]",
                             border_style="bold cyan"
+                        )
+                    )
+                    console.print(
+                        Panel.fit(
+                            Markdown(answer),
+                            title="[bold green]New Answer[/] 🤖✨",
+                            title_align='left',
+                            border_style="bold green"
                         )
                     )
 
