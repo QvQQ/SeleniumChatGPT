@@ -76,7 +76,6 @@ class SeleniumChatGPT:
     ## 最后一条会话消息 (assistant) 底部的重新生成按钮 (假定在第 3 个)
     xpath_chat__conversation_last_assistant_turn_regenerate_button = xpath_chat__conversation_last_assistant_turn_action_buttons + "[3]"
 
-
     ## 模型选择菜单
     xpath_chat__model_menu_div = "//div[@aria-haspopup='menu' and starts-with(@id, 'radix-:')]"
     ## 模型选择菜单中的模型名
@@ -527,6 +526,9 @@ class SeleniumChatGPT:
 
         # 点击最后一条 assistant 消息底部的重新生成按钮
         self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_regenerate_button, label='LastTurnRegenerateButton')
+
+        # 先等待原有的 turn 的 inner_div 中的 正常消息 消失
+        self._helper.wait_until_disappear(By.XPATH, self.xpath_chat__conversation_specified_assistant_turn_inner_div.format(turn=expected_turn), label='LastTurnInnerDiv')
 
         # 直接等待 specified turn 出现（代表开始生成，无论是报错还是正常消息），或是 Regenerate 按钮，这三种情况
         max_tries = 5

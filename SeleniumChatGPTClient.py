@@ -78,6 +78,7 @@ class SeleniumChatGPTClient:
             "user_data_dir": user_data_dir
         }
         try:
+            self._console.log(f"[bold white]Starting SeleniumChatGPT Client...[/]")
             response = requests.post(f"{self._base_url}/start_client", json=data, timeout=self._timeout)
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
@@ -159,7 +160,6 @@ if __name__ == '__main__':
     # for REPL
     from rich.console import Console
     from rich.panel import Panel
-    from rich.prompt import Prompt
     from rich.markdown import Markdown
 
     from prompt_toolkit import PromptSession
