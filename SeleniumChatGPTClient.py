@@ -31,14 +31,20 @@ class SeleniumChatGPTClient:
         :return: JSON data from the response.
         """
         try:
+            response.raise_for_status()
             data = response.json()
+
+        except requests.exceptions.HTTPError as http_err:
+            if response.status_code in [400, 404]:
+                data = http_err.response.json()
+                self._console.log(f"Error {data['code']}: {data['message']}")
+            else:
+                self._console.log(f"[bold yellow]!!! Error occurred !!![/] [bold red]{repr(http_err)}[/]")
+            raise
+
         except requests.exceptions.JSONDecodeError:
             self._console.log(f"response.text = {response.text}")
             raise
-
-        if response.status_code >= 400:
-            self._console.log(data)
-            raise RuntimeError(f"Error {data['code']}: {data['message']}")
 
         self._console.log(f"[green]Message: {data['message']}[/]")
         return Box(data)
@@ -49,10 +55,11 @@ class SeleniumChatGPTClient:
         """
         try:
             response = requests.post(f"{self._base_url}/shutdown", timeout=self._timeout)
-            self._handle_response(response)
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
+        else:
+            self._handle_response(response)
 
     def start_client(
         self,
@@ -72,10 +79,11 @@ class SeleniumChatGPTClient:
         }
         try:
             response = requests.post(f"{self._base_url}/start_client", json=data, timeout=self._timeout)
-            self._handle_response(response)
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
+        else:
+            self._handle_response(response)
 
     def chat(self, question: str) -> str:
         """
@@ -86,57 +94,65 @@ class SeleniumChatGPTClient:
         """
         try:
             response = requests.post(f"{self._base_url}/chat", json={"question": question}, timeout=self._timeout)
-            data = self._handle_response(response)
-            return data.data.answer
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
+        else:
+            data = self._handle_response(response)
+            return data.data.answer
 
     def switch_model(self, target_model: str):
         try:
             response = requests.post(f"{self._base_url}/switch_model", json={"target_model": target_model}, timeout=self._timeout)
-            self._handle_response(response)
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
+        else:
+            self._handle_response(response)
 
     def switch_temporary_mode(self, temporary: bool):
         try:
             response = requests.post(f"{self._base_url}/switch_temporary_mode", json={"temporary": temporary}, timeout=self._timeout)
-            self._handle_response(response)
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
+        else:
+            self._handle_response(response)
 
     def new_chat(self):
         try:
             response = requests.post(f"{self._base_url}/new_chat", timeout=self._timeout)
-            self._handle_response(response)
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
+        else:
+            self._handle_response(response)
 
     def regenerate(self):
         try:
             response = requests.post(f"{self._base_url}/regenerate", timeout=self._timeout)
-            self._handle_response(response)
         except requests.RequestException as e:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
+        else:
+            self._handle_response(response)
 
 
 if __name__ == '__main__':
 
+    # read configuration
+    config = Box.from_yaml(filename='./client_config.yaml')
+
     console = Console()
-    client = SeleniumChatGPTClient(base_url='http://localhost:15001', timeout=300, console=console)
+    client = SeleniumChatGPTClient(base_url=config.base_url, timeout=300, console=console)
 
     client.start_client(
-        email='',
-        password='',  # noqa
-        login_type='OpenAI',
-        capsolver_client_key=None,
-        headless=False,
-        user_data_dir='user_data_dir'  # noqa
+        email=config.email,
+        password=config.password,
+        login_type=config.login_type,
+        capsolver_client_key=config.capsolver_client_key,
+        headless=config.headless,
+        user_data_dir=config.user_data_dir
     )
 
     # for REPL

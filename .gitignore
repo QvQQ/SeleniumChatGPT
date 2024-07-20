@@ -1,7 +1,8 @@
 
 # custom configuration file
-utils/
+client_config.yaml
 sync*.sh
+utils/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

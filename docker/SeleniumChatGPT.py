@@ -510,60 +510,110 @@ class SeleniumChatGPT:
         """
         self._logger.info(f"[bold]Attempting to regenerate the answer...[/]")
 
+        # 获取当前 assistant message 的 turn 数，与后面作比较，确保的确生成了新答案
+        if last_turn_div := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_outer_div, ignore_failure=True, label='TurnsOfAssistantMessage'):
+            # 之前有过对话，turn 存在
+            data_testid = last_turn_div.get_attribute('data-testid')
+            assert isinstance(data_testid, str) and data_testid.startswith('conversation-turn-'), f'Invalid data testid: {data_testid}, should start with "conversation-turn-"!'
+            last_turn = int(data_testid.split('-')[-1])
+            self._logger.info(f"Last conversation turns: {last_turn}")
+        else:
+            last_turn = 1  # system prompt
+            self._logger.info(f"Last conversation turn not found! Assuming 'last_turn' = {last_turn} ...")
+
+        # !!! 在 Regenerate 过程中，应当出现的 turn 与之前一致
+        expected_turn = last_turn
+        self._logger.info(f"Expected new turn: {expected_turn}")
+
         # 点击最后一条 assistant 消息底部的重新生成按钮
         self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_regenerate_button, label='LastTurnRegenerateButton')
 
-        # !!! 也存在没出现中止生成按钮，直接出现了红框错误消息的情况（需要同步等待） !!!
-        # 等待中止生成按钮出现（代表开始生成）
-        # self._helper.wait_until_appear(By.XPATH, self.xpath_chat__stop_button, label='StopButton')
-        label, element = self._helper.wait_for_mutually_exclusive_elements(
-            by=By.XPATH,
-            queries=[self.xpath_chat__stop_button, self.xpath_chat__conversation_error_message_p],
-            labels=['StopButton', 'ConversationErrorMessage']
-        )
-        if label == 'ConversationErrorMessage':
-            # 出问题咧，红色边框消息
-            self._logger.error(element.get_attribute('outerHTML'))
-            self._helper.save_debug_screenshot('ConversationErrorMessage-1')
-            raise RuntimeError(f"Error occurred while generating response!")
+        # 直接等待 specified turn 出现（代表开始生成，无论是报错还是正常消息），或是 Regenerate 按钮，这三种情况
+        max_tries = 5
+        for loop_count in range(max_tries):  # 最多循环 max_tries 次
+            # 非首次尝试时，进行提醒
+            if loop_count != 0:
+                self._logger.warning(f"[bold yellow]Loop count {loop_count} times![/]")
 
-        # 等待中止生成按钮消失（代表生成结束）
-        self._helper.wait_until_disappear(By.XPATH, self.xpath_chat__stop_button, timeout_duration=180, label='StopButton')
+            match self._helper.wait_for_mutually_exclusive_elements(
+                by=By.XPATH,
+                queries=[
+                    self.xpath_chat__conversation_specified_assistant_turn_inner_div.format(turn=expected_turn),
+                    # self.xpath_chat__conversation_specified_error_message_p.format(turn=expected_turn),
+                    self.xpath_chat__error_regenerate_button
+                ],
+                labels=[
+                    'NormalMessage',
+                    # 'ErrorMessage',
+                    'RegenerateButton'
+                ]
+            ):
+                case ('NormalMessage', _):
+                    # 情景一：开始正常生成消息
+                    self._logger.info("Current situation is 'NormalMessage' stage.")
+
+                    # 点击到达底部按钮
+                    self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__scroll_to_bottom_button, ignore_failure=True, label='ScrollToBottomButton')
+
+                    # 等待中止生成按钮消失（代表生成结束）
+                    self._helper.wait_until_disappear(By.XPATH, self.xpath_chat__stop_button, timeout_duration=180, label='StopButton')
+
+                    # 优先查看是否有重新生成按钮（P.S. 存在无报错但生成失败的情况）
+                    if regenerate_button := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__error_regenerate_button, ignore_failure=True, label='RegenerateButton'):
+                        # 没有红框，但还是生成错误
+                        self._logger.warning("'RegenerateButton' found. Something is wrong!")
+                        self._helper.save_debug_screenshot('RegenerateButton')
+                        self._logger.warning('[bold yellow]Regenerating...[/]')
+                        regenerate_button.click()
+                        continue
+
+                    # 查看是否有错误消息
+                    # TODO: 这一步可能是多余的，即，可能现在是：如果有错误消息，那么必然会有 RegenerateButton
+                    if error_message_p := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_error_message_p, ignore_failure=True, label='ConversationErrorMessage'):
+                        # 有了红色边框的错误消息
+                        self._logger.error(error_message_p.get_attribute('outerHTML'))
+                        self._helper.save_debug_screenshot('ConversationErrorMessage-2')
+                        raise RuntimeError(f"Error occurred while generating response!")
+
+                    break
+
+                # TODO: 测试是否在生成开始时会出现有 RegenerateButton 但无 ErrorMessage 的情况
+                # 如果没有的话，就可以直接等待两种情景，而不是三种。
+                # case ('ErrorMessage', error_message_p):
+                #     # 情景二：出现了红框错误消息
+                #     self._logger.info("Current situation is 'ErrorMessage' stage.")
+                #     self._logger.error(error_message_p.get_attribute('outerHTML'))
+                #     self._helper.save_debug_screenshot('ConversationErrorMessage-2')
+                #     raise RuntimeError(f"Error occurred while generating response!")
+
+                case ('RegenerateButton', regenerate_button):
+                    # 情景三：未出现上面两个消息，没有聊天气泡出现，直接出现了 重新生成 按钮
+                    self._logger.info("Current situation is 'RegenerateButton' stage.")
+                    self._logger.warning("'RegenerateButton' found. Something is wrong!")
+                    self._helper.save_debug_screenshot('RegenerateButton')
+                    self._logger.warning('[bold yellow]Regenerating...[/]')
+                    regenerate_button.click()
+                    continue
+        else:
+            # 最大尝试次数尝试完毕，仍然没有成功生成消息
+            self._logger.error(f"[bold red]Max retries meet! Could not generate normal response![/]")
+            self._helper.save_debug_screenshot('MaxRegenerateRetriesMeet')
+            raise RuntimeError("Regenerate failed. Max retries meet.")
+
+        # 生成没问题，等待答案出现
+        answer_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_specified_assistant_turn_inner_div.format(turn=expected_turn), label='Answer')
 
         # 点击到达底部按钮
         self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__scroll_to_bottom_button, ignore_failure=True, label='ScrollToBottomButton')
-
-        # 等待气泡中的内容稳定
-        self._helper.check_element_stability(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_outer_div, check_period=1, confirmation_time=5, label='LastMessage')
-
-        # 查看是否有错误消息
-        if error_message_p := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_error_message_p, ignore_failure=True, label='ConversationErrorMessage'):
-            # 有了红色边框的错误消息
-            self._logger.error(error_message_p.get_attribute('outerHTML'))
-            self._helper.save_debug_screenshot('ConversationErrorMessage-2')
-            raise RuntimeError(f"Error occurred while generating response!")
-
-        # 如果没有错误消息，那么查看是否有重新生成按钮（的确存在无报错但生成失败的情况）
-        if regenerate_button := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__error_regenerate_button, ignore_failure=True, label='RegenerateButton'):
-            # 没有红框，但还是生成错误
-            self._logger.error(f"[bold red]'RegenerateButton' found. Something is wrong![/]")
-            self._helper.save_debug_screenshot('RegenerateButton')
-            raise RuntimeError(f"Error occurred while generating response!")
-
-        # 生成没问题，等待答案出现（也的确存在已经出现了 assistant 的聊天气泡但其内容为空的情况，此时 answer 由于等待的是内部的 markdown 部分，还没有出现，所以不存在）
-        answer_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_inner_div, label='Answer')
-
-        # 等待不如早点重开
-        # self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_inner_div, label='Answer')
 
         # 点击复制按钮（不直接使用`answer_div.text`获取是因为，这样获取到的会将 bullet points 的序号丢掉）
         # answer = answer_div.text
         answer = self._copy_answer_to_clipboard()
 
         self._logger.info(f"[bold green]Answer is ready![/]")
-        self._logger.info(f"[cyan]{'-' * (self._console_width - 27)}[/]")
-        self._logger.info(f"[cyan]{answer}[/]")
-        self._logger.info(f"[cyan]{'-' * (self._console_width - 27)}[/]")
+        self._logger.info(f"[blue]{'-' * (self._console_width - 27)}[/]")
+        self._logger.info(f"[blue]{answer}[/]")
+        self._logger.info(f"[blue]{'-' * (self._console_width - 27)}[/]")
 
         return answer
 
@@ -606,6 +656,7 @@ class SeleniumChatGPT:
 
         # 应当出现的 turn
         expected_turn = last_turn + 2
+        self._logger.info(f"Expected new turn: {expected_turn}")
 
         # 向文本框输入内容
         self._helper.find_then_input_or_fail(
@@ -621,7 +672,7 @@ class SeleniumChatGPT:
         self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__send_button_enabled, label='SendButtonEnabled')
 
         # 直接等待 specified turn 出现（代表开始生成，无论是报错还是正常消息），或是 Regenerate 按钮，这三种情况
-        max_tries = 10
+        max_tries = 5
         for loop_count in range(max_tries):  # 最多循环 max_tries 次
             # 非首次尝试时，进行提醒
             if loop_count != 0:
@@ -631,58 +682,66 @@ class SeleniumChatGPT:
                 by=By.XPATH,
                 queries=[
                     self.xpath_chat__conversation_specified_assistant_turn_inner_div.format(turn=expected_turn),
-                    self.xpath_chat__conversation_specified_error_message_p.format(turn=expected_turn),
+                    # self.xpath_chat__conversation_specified_error_message_p.format(turn=expected_turn),
                     self.xpath_chat__error_regenerate_button
                 ],
                 labels=[
                     'NormalMessage',
-                    'ErrorMessage',
+                    # 'ErrorMessage',
                     'RegenerateButton'
                 ]
             ):
                 case ('NormalMessage', _):
                     # 情景一：开始正常生成消息
                     self._logger.info("Current situation is 'NormalMessage' stage.")
+
                     # 点击到达底部按钮
                     self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__scroll_to_bottom_button, ignore_failure=True, label='ScrollToBottomButton')
-                    break
-                case ('ErrorMessage', error_message_p):
-                    # 情景二：出现了红框错误消息
-                    self._logger.info("Current situation is 'ErrorMessage' stage.")
-                    self._logger.error(error_message_p.get_attribute('outerHTML'))
-                    self._helper.save_debug_screenshot('ConversationErrorMessage-2')
-                    raise RuntimeError(f"Error occurred while generating response!")
 
-                case ('RegenerateButton', _):
+                    # 等待中止生成按钮消失（代表生成结束）
+                    self._helper.wait_until_disappear(By.XPATH, self.xpath_chat__stop_button, timeout_duration=180, label='StopButton')
+
+                    # 优先查看是否有重新生成按钮（P.S. 存在无报错但生成失败的情况）
+                    if regenerate_button := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__error_regenerate_button, ignore_failure=True, label='RegenerateButton'):
+                        # 没有红框，但还是生成错误
+                        self._logger.warning("'RegenerateButton' found. Something is wrong!")
+                        self._helper.save_debug_screenshot('RegenerateButton')
+                        self._logger.warning('[bold yellow]Regenerating...[/]')
+                        regenerate_button.click()
+                        continue
+
+                    # 查看是否有错误消息
+                    # TODO: 这一步可能是多余的，即，可能现在是：如果有错误消息，那么必然会有 RegenerateButton
+                    if error_message_p := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_error_message_p, ignore_failure=True, label='ConversationErrorMessage'):
+                        # 有了红色边框的错误消息
+                        self._logger.error(error_message_p.get_attribute('outerHTML'))
+                        self._helper.save_debug_screenshot('ConversationErrorMessage-2')
+                        raise RuntimeError(f"Error occurred while generating response!")
+
+                    break
+
+                # TODO: 测试是否在生成开始时会出现有 RegenerateButton 但无 ErrorMessage 的情况
+                # 如果没有的话，就可以直接等待两种情景，而不是三种。
+                # case ('ErrorMessage', error_message_p):
+                #     # 情景二：出现了红框错误消息
+                #     self._logger.info("Current situation is 'ErrorMessage' stage.")
+                #     self._logger.error(error_message_p.get_attribute('outerHTML'))
+                #     self._helper.save_debug_screenshot('ConversationErrorMessage-2')
+                #     raise RuntimeError(f"Error occurred while generating response!")
+
+                case ('RegenerateButton', regenerate_button):
                     # 情景三：未出现上面两个消息，没有聊天气泡出现，直接出现了 重新生成 按钮
                     self._logger.info("Current situation is 'RegenerateButton' stage.")
                     self._logger.warning("'RegenerateButton' found. Something is wrong!")
                     self._helper.save_debug_screenshot('RegenerateButton')
-                    # raise RuntimeError(f"Error occurred while generating response!")
                     self._logger.warning('[bold yellow]Regenerating...[/]')
+                    regenerate_button.click()
                     continue
         else:
             # 最大尝试次数尝试完毕，仍然没有成功生成消息
             self._logger.error(f"[bold red]Max retries meet! Could not generate normal response![/]")
             self._helper.save_debug_screenshot('MaxRegenerateRetriesMeet')
             raise RuntimeError("Regenerate failed. Max retries meet.")
-
-        # 等待中止生成按钮消失（代表生成结束）
-        self._helper.wait_until_disappear(By.XPATH, self.xpath_chat__stop_button, timeout_duration=180, label='StopButton')
-
-        # 查看是否有错误消息
-        if error_message_p := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_error_message_p, ignore_failure=True, label='ConversationErrorMessage'):
-            # 有了红色边框的错误消息
-            self._logger.error(error_message_p.get_attribute('outerHTML'))
-            self._helper.save_debug_screenshot('ConversationErrorMessage-2')
-            raise RuntimeError(f"Error occurred while generating response!")
-
-        # 如果没有错误消息，那么查看是否有重新生成按钮（的确存在无报错但生成失败的情况）
-        if regenerate_button := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__error_regenerate_button, ignore_failure=True, label='RegenerateButton'):
-            # 没有红框，但还是生成错误
-            self._logger.error(f"[bold red]'RegenerateButton' found. Something is wrong![/]")
-            self._helper.save_debug_screenshot('RegenerateButton')
-            raise RuntimeError(f"Error occurred while generating response!")
 
         # 生成没问题，等待答案出现
         answer_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_specified_assistant_turn_inner_div.format(turn=expected_turn), label='Answer')

@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import os
-import subprocess
 import signal
+import subprocess
 from typing import Optional
 
 # for logging
@@ -57,7 +57,6 @@ werkzeug_logger.propagate = False
 # 关掉自己
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
-    # subprocess.Popen(f'sleep 2; kill -s SIGINT {os.getpid()}', shell=True)  # Popen 非阻塞，run 阻塞
     global client
 
     if client and client.quit():  # noqa
@@ -67,7 +66,8 @@ def shutdown():
         # 退出浏览器失败了，只能关掉自己了
         console.log("[bold green][Flask][/] [bold red]Client reset failed![/]")
         console.log("[bold green][Flask][/] [bold red]Shutting down the server...[/]")
-        os.kill(os.getpid(), signal.SIGINT)
+        # os.kill(os.getpid(), signal.SIGINT)  # noqa
+        subprocess.Popen(f'sleep 2; kill -s SIGINT {os.getpid()}', shell=True)  # Popen 非阻塞，run 阻塞
 
     return jsonify({"code": 200, "message": "Closed.", "data": {}}), 200
 
@@ -203,5 +203,4 @@ if __name__ == '__main__':
     console.log(f'[bold green][Flask][/] [bold]DISPLAY = {display}[/]')
     console.log(f'[bold green][Flask][/] [bold]HTTP_PROXY = {http_proxy}[/]')
 
-    app.run(host='0.0.0.0', port=15001)
-
+    app.run(host='0.0.0.0', port=15001, threaded=False)
