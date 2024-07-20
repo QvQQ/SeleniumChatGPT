@@ -168,6 +168,10 @@ class SeleniumChatGPT:
         # 设置窗口初始位置
         options.add_argument("--window-position=0,0")
 
+        # 设置暗色主题
+        options.add_argument("--force-dark-mode")
+        options.add_argument("--enable-features=WebUIDarkMode")
+
         # 检查是否存在http_proxy环境变量
         http_proxy = os.getenv('http_proxy') or os.getenv('HTTP_PROXY')
         if http_proxy:

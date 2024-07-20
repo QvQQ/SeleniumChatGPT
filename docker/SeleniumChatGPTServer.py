@@ -67,7 +67,7 @@ def shutdown():
         console.log("[bold green][Flask][/] [bold red]Client reset failed![/]")
         console.log("[bold green][Flask][/] [bold red]Shutting down the server...[/]")
         # os.kill(os.getpid(), signal.SIGINT)  # noqa
-        subprocess.Popen(f'sleep 2; kill -s SIGINT {os.getpid()}', shell=True)  # Popen 非阻塞，run 阻塞
+        subprocess.Popen(f'sleep 2; kill -SIGINT {os.getpid()}', shell=True)  # Popen 非阻塞，run 阻塞
 
     return jsonify({"code": 200, "message": "Closed.", "data": {}}), 200
 
