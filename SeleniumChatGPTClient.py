@@ -161,6 +161,27 @@ if __name__ == '__main__':
     from rich.prompt import Prompt
     from rich.markdown import Markdown
 
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.history import InMemoryHistory
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    from prompt_toolkit.completion import WordCompleter
+    from prompt_toolkit.styles import Style
+    from prompt_toolkit.shortcuts import CompleteStyle
+    from prompt_toolkit.formatted_text import HTML
+
+    # 定义命令的自动补全选项
+    command_completer = WordCompleter([
+        '/help', '/shutdown', '/new_chat', '/regenerate', '/switch_model', '/switch_temporary_mode'
+    ], ignore_case=True, match_middle=True, sentence=True)
+
+    # 创建一个带有内存历史记录的会话
+    session = PromptSession(history=InMemoryHistory())
+
+    # 定义样式
+    style = Style.from_dict({
+        'prompt': '#FFFFFF bold',
+    })
+
     console.print(
         Panel.fit(
             "🤖 [bold blue]Welcome to the SeleniumChatGPT REPL![/bold blue] 🎉🎈✨",
@@ -170,7 +191,13 @@ if __name__ == '__main__':
 
     try:
         while True:
-            command = Prompt.ask("[bold]Enter your question or command (type '/help' for options)[/] 🌟💬")
+            command = session.prompt(
+                HTML("<prompt>Message ChatGPT</prompt> 💬🌟: "),
+                completer=command_completer,
+                complete_style=CompleteStyle.COLUMN,
+                auto_suggest=AutoSuggestFromHistory(),
+                style=style
+            )
 
             if command.startswith('/'):
                 if command == "/shutdown":
@@ -264,7 +291,7 @@ if __name__ == '__main__':
                         )
                     )
 
-    except KeyboardInterrupt:
+    except (EOFError, KeyboardInterrupt):
         console.print()
         console.print(
             Panel.fit(
