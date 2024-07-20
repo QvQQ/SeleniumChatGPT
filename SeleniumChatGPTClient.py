@@ -191,7 +191,7 @@ if __name__ == '__main__':
 
     try:
         while True:
-            command = session.prompt(
+            command: str = session.prompt(
                 HTML("<prompt>Message ChatGPT</prompt> 💬🌟: "),
                 completer=command_completer,
                 complete_style=CompleteStyle.COLUMN,
@@ -244,7 +244,7 @@ if __name__ == '__main__':
                     )
 
                 elif command.startswith("/switch_model "):
-                    model = command.split(' ')[1]
+                    model = command.split(' ', 1)[-1]
                     client.switch_model(model)
                     console.print(
                         Panel.fit(
