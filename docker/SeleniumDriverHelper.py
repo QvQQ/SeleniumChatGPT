@@ -14,6 +14,14 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC  # noqa
 import selenium.common.exceptions as Exceptions  # noqa
+from selenium.webdriver import Keys
+
+# for debug screenshot save
+import os
+
+# for input with 'copy_paste' method
+import pyperclip
+import platform
 
 
 class SeleniumDriverHelper:
@@ -33,7 +41,8 @@ class SeleniumDriverHelper:
         self,
         by: str, query: str,
         ignore_failure: bool = False,
-        label: str = ''
+        *,
+        label: str
     ) -> Optional[WebElement]:
         """
         Finds a list of elements given query, if none of the items exists, throws an error
@@ -47,7 +56,6 @@ class SeleniumDriverHelper:
         Returns:
             WebElement: Web element or None if not found.
         """
-        label = label or query
         self.logger.info(f"[dim cyan]Attempting to locate element '{label}'...[/]")
         try:
             element = self.browser.find_element(by, query)
@@ -59,13 +67,15 @@ class SeleniumDriverHelper:
                 self.logger.warning(f"[dim]Element '{label}' is not found.[/]")
                 return None
             self.logger.error(f"[bold red]Element '{label}' is not found.[/]")
+            self.save_debug_screenshot(f'find_element_or_fail-{label}')
             raise
 
     def wait_until_appear(
         self,
         by: str, query: str,
         timeout_duration: int = 60, ignore_timeout: bool = False,
-        label: str = ''
+        *,
+        label: str
     ) -> Optional[WebElement]:
         """
         Waits until the specified web element appears on the page.
@@ -84,7 +94,6 @@ class SeleniumDriverHelper:
         Returns:
             Optional[WebElement]: The web element if found, else None.
         """
-        label = label or query
         self.logger.info(f"[dim cyan]Waiting for element '{label}' to appear.[/]")
         try:
             element = WebDriverWait(
@@ -100,13 +109,15 @@ class SeleniumDriverHelper:
                 self.logger.warning("[bold yellow]Timeout reached but ignoring since ignore_timeout is True.[/]")
                 return None
             self.logger.error(f"[bold red]Element '{label}' did not appear within {timeout_duration}s, something is wrong![/]")
+            self.save_debug_screenshot(f'wait_until_appear-{label}')
             raise  # Re-raise the exception if ignore_timeout is False
 
     def wait_until_disappear(
         self,
         by: str, query: str,
         timeout_duration: int = 60, ignore_timeout: bool = False,
-        label: str = ''
+        *,
+        label: str
     ) -> Optional[bool]:
         """
         Waits until the specified web element disappears from the page.
@@ -125,7 +136,6 @@ class SeleniumDriverHelper:
         Returns:
             Optional[bool]: True if the element disappeared, False otherwise.
         """
-        label = label or query
         self.logger.info(f"[dim cyan]Waiting for element '{label}' to disappear.[/]")
         try:
             WebDriverWait(
@@ -141,13 +151,15 @@ class SeleniumDriverHelper:
                 self.logger.warning("[bold yellow]Timeout reached but ignoring since ignore_timeout is True.[/]")
                 return False
             self.logger.error(f"[bold red]Element '{query}' still here within {timeout_duration}s, something is wrong![/]")
+            self.save_debug_screenshot(f'wait_until_disappear-{label}')
             raise  # Re-raise the exception if ignore_timeout is False
 
     def wait_for_mutually_exclusive_elements(
         self,
         by: str, queries: List[str],
         timeout_duration: int = 60, ignore_timeout: bool = False,
-        labels: List[str] = None
+        *,
+        labels: List[str]
     ) -> Tuple[str, WebElement] | Tuple[None, None]:
         """
         Waits for one of two elements identified by a single locator strategy and two distinct queries.
@@ -163,12 +175,10 @@ class SeleniumDriverHelper:
             Tuple[str, WebElement] | Tuple[None, None]: A tuple where the first element is the label or query of the element that was found,
             or None if neither was found, and the second element is the WebElement or None.
         """
-        if labels is not None:
-            assert len(labels) == len(queries), "Number of labels and queries must have the same size!"
-            assert all([isinstance(label, str) for label in labels]), "Every label must be of type str!"
-            assert all([len(label) != 0 for label in labels]), "Each label must not be an empty string!"
-        else:
-            labels = queries.copy()
+
+        assert len(labels) == len(queries), "Number of labels and queries must have the same size!"
+        assert all([isinstance(label, str) for label in labels]), "Every label must be of type str!"
+        assert all([len(label) != 0 for label in labels]), "Each label must not be an empty string!"
 
         self.logger.info(f"[dim cyan]Starting to wait for any of the labels({labels}) to appear on the page.[/]")
         try:
@@ -189,19 +199,23 @@ class SeleniumDriverHelper:
                 except Exceptions.NoSuchElementException:
                     self.logger.warning(f"[dim]Element '{label}' not found.[/]")
 
-            raise RuntimeError("No elements were found after at least one was expected!")
+            self.logger.error("[bold red]No elements were found after at least one was expected![/]")
+            self.save_debug_screenshot(f'wait_for_mutually_exclusive_elements-{labels}')
+            raise RuntimeError("Strange error occurred!")
 
         except Exceptions.TimeoutException:
             if ignore_timeout:
                 self.logger.warning("[bold yellow]Timeout reached but ignoring since ignore_timeout is True.[/]")
                 return None, None
             self.logger.error("[bold red]Timeout occurred. Neither element appeared within the specified time.[/]")
+            self.save_debug_screenshot(f'wait_for_mutually_exclusive_elements-[{",".join(labels)}]')
             raise  # Re-raise the exception if ignore_timeout is False
 
     def _click(
         self,
         element: WebElement,
-        label: str = ''
+        *,
+        label: str
     ) -> bool:
         self.logger.info(f"[dim cyan]Attempting to click '{label}'...[/]")
         if element:
@@ -215,8 +229,9 @@ class SeleniumDriverHelper:
         self,
         element: WebElement,
         text: str,
-        input_method: Literal["whole", "split_lines", "javascript"] = "whole",
-        label: str = ''
+        input_method: Literal["whole", "split_lines", "javascript", "copy_paste"] = "whole",
+        *,
+        label: str
     ) -> bool:
         self.logger.info(f"[dim cyan]Attempting to input '{label}'...[/]")
         if element:
@@ -248,6 +263,17 @@ class SeleniumDriverHelper:
                     # self.logger.info('Step.4 Add an additional ENTER.')
                     # element.send_keys(Keys.SHIFT + Keys.ENTER)
                     # element.send_keys('\n')
+                case 'copy_paste':
+                    pyperclip.copy(text)
+                    self.logger.info(f"[dim]Text copied to clipboard! Attempting to paste to '{label}'...[/]")
+                    element.click()
+                    self.logger.info(f"[dim]Clicked '{label}' successfully[/]")
+                    # 检测操作系统类型并发送相应的粘贴快捷键
+                    if platform.system() == "Darwin":  # macOS
+                        element.send_keys(Keys.COMMAND, 'v')
+                    else:  # Windows or Linux
+                        element.send_keys(Keys.CONTROL, 'v')
+                    self.logger.info(f"[dim]Text pasted to '{label}'![/]")
 
             self.logger.info(f"[dim]Input has been done with '{label}'![/]")
             return True
@@ -259,7 +285,8 @@ class SeleniumDriverHelper:
         self,
         by: str, query: str,
         timeout_duration: int = 60, ignore_timeout: bool = False,
-        label: str = ''
+        *,
+        label: str
     ) -> bool:
         """
         Attempts to find and click an element based on specified locator `by` and `query`,
@@ -275,7 +302,6 @@ class SeleniumDriverHelper:
         Raises:
             NoSuchElementException: If `ignore_failure` is False and the element does not become clickable.
         """
-        label = label or query
         element = self.wait_until_appear(by, query, timeout_duration, ignore_timeout, label=label)
         return self._click(element, label=label)
 
@@ -283,9 +309,10 @@ class SeleniumDriverHelper:
         self,
         by: str, query: str,
         text: str,
-        input_method: Literal["whole", "split_lines", "javascript"] = "whole",
+        input_method: Literal["whole", "split_lines", "javascript", "copy_paste"] = "whole",
         timeout_duration: int = 60, ignore_timeout: bool = False,
-        label: str = ''
+        *,
+        label: str
     ) -> bool:
         """
         Attempts to find and input into an element based on specified locator `by` and `query`,
@@ -303,7 +330,6 @@ class SeleniumDriverHelper:
         Raises:
             NoSuchElementException: If `ignore_failure` is False and the element does not become clickable.
         """
-        label = label or query
         element = self.wait_until_appear(by, query, timeout_duration, ignore_timeout, label=label)
         return self._input(element, text, input_method, label=label)
 
@@ -311,9 +337,9 @@ class SeleniumDriverHelper:
         self,
         by: str, query: str,
         ignore_failure: bool = False,
-        label: str = ''
+        *,
+        label: str
     ) -> bool:
-        label = label or query
         element = self.find_element_or_fail(by, query, ignore_failure=ignore_failure, label=label)
         return self._click(element, label=label)
 
@@ -321,11 +347,11 @@ class SeleniumDriverHelper:
         self,
         by: str, query: str,
         text: str,
-        input_method: Literal["whole", "split_lines", "javascript"] = "whole",
+        input_method: Literal["whole", "split_lines", "javascript", "copy_paste"] = "whole",
         ignore_failure: bool = False,
-        label: str = ''
+        *,
+        label: str
     ) -> bool:
-        label = label or query
         element = self.find_element_or_fail(by, query, ignore_failure=ignore_failure, label=label)
         return self._input(element, text, input_method, label=label)
 
@@ -335,7 +361,8 @@ class SeleniumDriverHelper:
         check_period: int,
         confirmation_time,
         ignore_timeout=False,
-        label: str = ''
+        *,
+        label: str
     ) -> Optional[WebElement]:
         """
         Periodically checks if the content of a web element, located by 'by' and 'query',
@@ -352,7 +379,6 @@ class SeleniumDriverHelper:
         Returns:
             Optional[WebElement]: The web element if its content is confirmed stable.
         """
-        label = label or query
         last_content = None
         stability_start_time = None
         self.logger.info(f"[dim cyan]Starting to wait for element '{label}' to be stable at least {confirmation_time}s.[/]")
@@ -393,4 +419,11 @@ class SeleniumDriverHelper:
                     self.logger.warning("[bold yellow]Timeout reached but ignoring since ignore_timeout is True.[/]")
                     return None
                 self.logger.error(f"[bold red]Element '{label}' did not meet stability requirements finally![/]")
+                self.save_debug_screenshot(f'check_element_stability-{label}')
                 raise  # Re-raise the exception if ignore_timeout is False
+
+    def save_debug_screenshot(self, part_name: str, directory: str = './debug'):
+        os.makedirs(directory, exist_ok=True)
+        screenshot_path = os.path.join(directory, f'{time.strftime("%y%m%d-%H%M%S")}-{part_name}.png')
+        self.browser.save_screenshot(screenshot_path)
+        self.logger.warning(f"[bold yellow]Debug screenshot saved. Please check {screenshot_path} for more details![/]")

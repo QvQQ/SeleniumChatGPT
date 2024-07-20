@@ -10,5 +10,13 @@ services:
       - "7900:7900"    # noVNC
       - "15001:15001"  # SeleniumChatGPTServer service listen port
     environment:
-      - PORT=15001
+      PORT: 15001
+      # DISPLAY: "orangepi-2.local:0"
+      # DISPLAY: "192.168.1.42:0"
+      DISPLAY: ":99.0"
+      # HTTP_PROXY: ""
+      # HTTP_PROXY: ""
+    volumes:
+      - ./chrome_user_data:/home/seluser/user_data_dir
+      - ./debug:/home/seluser/debug
 

@@ -22,7 +22,7 @@ client: Optional[SeleniumChatGPT] = None
 
 # ------------------------------------------------------------------------------------
 # 创建一个Rich的Console对象
-console = Console(width=104-15)
+console = Console(width=104)
 
 # 配置日志，使用RichHandler
 logging.basicConfig(
@@ -58,7 +58,16 @@ werkzeug_logger.propagate = False
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
     # subprocess.Popen(f'sleep 2; kill -s SIGINT {os.getpid()}', shell=True)  # Popen 非阻塞，run 阻塞
-    os.kill(os.getpid(), signal.SIGINT)
+    global client
+
+    if client and client.quit():  # noqa
+        console.log("[bold green][Flask][/] [bold yellow]Client reset![/]")
+        client = None
+    else:
+        # 退出浏览器失败了，只能关掉自己了
+        console.log("[bold green][Flask][/] [bold red]Client reset failed![/]")
+        console.log("[bold green][Flask][/] [bold red]Shutting down the server...[/]")
+        os.kill(os.getpid(), signal.SIGINT)
 
     return jsonify({"code": 200, "message": "Closed.", "data": {}}), 200
 
@@ -66,15 +75,8 @@ def shutdown():
 # ------------------------------------------------------------------------------------
 # 处理错误
 def handle_error(e: BaseException):
-    global client
-    werkzeug_logger.error(f"[Flask] Error Message: {repr(e)}")
-
-    if client and client.quit():  # noqa
-        client = None
-    else:
-        # 退出浏览器失败了，只能关掉自己了
-        os.kill(os.getpid(), signal.SIGINT)
-
+    console.log(f"[bold green][Flask][/] [bold red]Error Message: {repr(e)}[/]")
+    shutdown()
     return jsonify({"code": 400, "message": repr(e), "data": {}}), 400
 
 
@@ -97,7 +99,7 @@ def start_client():
             login_type=data.login_type,
             capsolver_client_key=data.capsolver_client_key,
             headless=data.headless,
-            user_data_dir=data.user_data_dir
+            user_data_dir=data.user_data_dir,
         )
         return jsonify({"code": 200, "message": f"Client created.", "data": {}}), 200
 
@@ -194,6 +196,12 @@ if __name__ == '__main__':
     # 在使用 docker run 命令启动容器时，可以使用 -e 标志传递环境变量。
     # 从环境变量获取端口号，默认使用 5000 端口
     port = int(os.getenv('PORT', 15001))
+    display = os.getenv('DISPLAY', ':99')
+    http_proxy = os.getenv('http_proxy') or os.getenv('HTTP_PROXY')
+
+    console.log(f'[bold green][Flask][/] [bold]PORT = {port}[/]')
+    console.log(f'[bold green][Flask][/] [bold]DISPLAY = {display}[/]')
+    console.log(f'[bold green][Flask][/] [bold]HTTP_PROXY = {http_proxy}[/]')
 
     app.run(host='0.0.0.0', port=15001)
 

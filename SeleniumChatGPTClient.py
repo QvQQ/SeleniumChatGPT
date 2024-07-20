@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding=utf-8 -*-
-import json
-
 import requests
 from box import Box
-from rich import print as rprint
-from typing import Literal
+from typing import Literal, Optional
+from rich.console import Console
 
 
 class SeleniumChatGPTClient:
@@ -13,15 +11,17 @@ class SeleniumChatGPTClient:
     A client to interact with SeleniumChatGPT server API.
     """
 
-    def __init__(self, base_url: str = 'http://localhost:15001', timeout: int = 300):
+    def __init__(self, base_url: str = 'http://localhost:15001', timeout: int = 300, console: Console = None):
         """
         Initialize the client with the base URL of the server.
 
         :param base_url: The base URL of the server, e.g. "http://localhost:15001".
         :param timeout: Timeout for requests (in seconds).
+        :param console: The console instance used to log.
         """
         self._base_url = base_url
         self._timeout = timeout
+        self._console = console or Console()
 
     def _handle_response(self, response: requests.Response) -> Box:
         """
@@ -32,15 +32,15 @@ class SeleniumChatGPTClient:
         """
         try:
             data = response.json()
-        except json.decoder.JSONDecodeError:
-            rprint(f"response.text = {response.text}")
+        except requests.exceptions.JSONDecodeError:
+            self._console.log(f"response.text = {response.text}")
             raise
 
         if response.status_code >= 400:
-            rprint(data)
+            self._console.log(data)
             raise RuntimeError(f"Error {data['code']}: {data['message']}")
 
-        rprint(f"[green]Message: {data['message']}[/]")
+        self._console.log(f"[green]Message: {data['message']}[/]")
         return Box(data)
 
     def shutdown(self):
@@ -51,18 +51,17 @@ class SeleniumChatGPTClient:
             response = requests.post(f"{self._base_url}/shutdown", timeout=self._timeout)
             self._handle_response(response)
         except requests.RequestException as e:
-            rprint(f"[red]Request Error: {e}[/]")
+            self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
 
     def start_client(
         self,
-        email, password,
+        email: str, password: str,
         login_type: Literal['OpenAI', 'Microsoft'],
-        capsolver_client_key=None,
-        headless=False,
-        user_data_dir=None
+        capsolver_client_key: Optional[str] = None,
+        headless: bool = False,
+        user_data_dir: Optional[str] = None,
     ):
-
         data = {
             "email": email,
             "password": password,
@@ -75,7 +74,7 @@ class SeleniumChatGPTClient:
             response = requests.post(f"{self._base_url}/start_client", json=data, timeout=self._timeout)
             self._handle_response(response)
         except requests.RequestException as e:
-            rprint(f"[red]Request Error: {e}[/]")
+            self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
 
     def chat(self, question: str) -> str:
@@ -90,7 +89,7 @@ class SeleniumChatGPTClient:
             data = self._handle_response(response)
             return data.data.answer
         except requests.RequestException as e:
-            rprint(f"[red]Request Error: {e}[/]")
+            self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
 
     def switch_model(self, target_model: str):
@@ -98,7 +97,7 @@ class SeleniumChatGPTClient:
             response = requests.post(f"{self._base_url}/switch_model", json={"target_model": target_model}, timeout=self._timeout)
             self._handle_response(response)
         except requests.RequestException as e:
-            rprint(f"[red]Request Error: {e}[/]")
+            self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
 
     def switch_temporary_mode(self, temporary: bool):
@@ -106,7 +105,7 @@ class SeleniumChatGPTClient:
             response = requests.post(f"{self._base_url}/switch_temporary_mode", json={"temporary": temporary}, timeout=self._timeout)
             self._handle_response(response)
         except requests.RequestException as e:
-            rprint(f"[red]Request Error: {e}[/]")
+            self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
 
     def new_chat(self):
@@ -114,7 +113,7 @@ class SeleniumChatGPTClient:
             response = requests.post(f"{self._base_url}/new_chat", timeout=self._timeout)
             self._handle_response(response)
         except requests.RequestException as e:
-            rprint(f"[red]Request Error: {e}[/]")
+            self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
 
     def regenerate(self):
@@ -122,47 +121,138 @@ class SeleniumChatGPTClient:
             response = requests.post(f"{self._base_url}/regenerate", timeout=self._timeout)
             self._handle_response(response)
         except requests.RequestException as e:
-            rprint(f"[red]Request Error: {e}[/]")
+            self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
 
 
 if __name__ == '__main__':
 
-    client = SeleniumChatGPTClient(base_url='http://localhost:15001', timeout=300)
+    console = Console()
+    client = SeleniumChatGPTClient(base_url='http://localhost:15001', timeout=300, console=console)
 
     client.start_client(
-        email='mjxhkpnchpr@outlook.com',
-        password='sRXc9T7YV5Q',  # noqa
+        email='',
+        password='',  # noqa
         login_type='OpenAI',
         capsolver_client_key=None,
         headless=False,
-        user_data_dir='./user_data'
+        user_data_dir='user_data_dir'  # noqa
     )
 
-    print('\nSwitch to temporary mode.')
-    client.switch_temporary_mode(True)
+    # for REPL
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.prompt import Prompt
+    from rich.markdown import Markdown
 
-    print('\nQuestion: Hello!')
-    client.chat('Hello!')
+    console.print(
+        Panel.fit(
+            "🤖 [bold blue]Welcome to the SeleniumChatGPT REPL![/bold blue] 🎉🎈✨",
+            border_style="bold blue"
+        )
+    )
 
-    # print('\nShutdown the server.')
-    # client.shutdown()
+    try:
+        while True:
+            command = Prompt.ask("[bold]Enter your question or command (type '/help' for options)[/] 🌟💬")
 
-    print('\nQuestion: Hello again!')
-    client.chat('Hello again!')
+            if command.startswith('/'):
+                if command == "/shutdown":
+                    client.shutdown()
+                    console.print(
+                        Panel.fit(
+                            "[bold red]🔌 Server shutdown. Goodbye! 🥺👋💔[/]",
+                            border_style="bold red"
+                        )
+                    )
+                    console.print()
+                    break
 
-    print('\nQuestion: What can you do for me?')
-    client.chat('What can you do for me?')
+                elif command == "/new_chat":
+                    client.new_chat()
+                    console.print(
+                        Panel.fit(
+                            "[bold yellow]🆕 Started a new chat session. Let's begin! 🚀💬[/]",
+                            border_style="bold yellow"
+                        )
+                    )
 
-    print('\nRegenerate')
-    client.regenerate()
+                elif command == "/regenerate":
+                    client.regenerate()
+                    console.print(
+                        Panel.fit(
+                            "[bold cyan]🔄 Regenerated the last response. Here we go again! 🎉🔁[/]",
+                            border_style="bold cyan"
+                        )
+                    )
 
-    print('\nNew Chat')
-    client.new_chat()
+                elif command == "/help":
+                    console.print(
+                        Panel.fit(
+                            "[bold blue]/help[/] - Show this help message\n"
+                            "[bold blue]/shutdown[/] - Shutdown the server\n"
+                            "[bold blue]/new_chat[/] - Start a new chat session\n"
+                            "[bold blue]/regenerate[/] - Regenerate the last response\n"
+                            "[bold blue]/switch_model <model>[/] - Switch the model\n"
+                            "[bold blue]/switch_temporary_mode <true/false>[/] - Switch temporary mode",
+                            title="Commands",
+                            padding=(1, 4)
+                        )
+                    )
 
-    print('\nSwitch to temporary mode.')
-    client.switch_temporary_mode(True)
+                elif command.startswith("/switch_model "):
+                    model = command.split(' ')[1]
+                    client.switch_model(model)
+                    console.print(
+                        Panel.fit(
+                            f"[bold green]🔄 Switched to model: [bold white]{model}[/]. Model changed! 🦾🤖[/]",
+                            border_style="bold green"
+                        )
+                    )
 
-    print('\nQuestion: Hello again! Please answer me with many many emojis!')
-    client.chat('Hello again! Please answer me with many many emojis!')
+                elif command.startswith("/switch_temporary_mode "):
+                    temp_mode = command.split(' ')[1].lower() == 'true'
+                    client.switch_temporary_mode(temp_mode)
+                    console.print(
+                        Panel.fit(
+                            f"[bold green]🔄 Switched temporary mode to: [bold white]{temp_mode}[/]. Mode toggled! 🔀🕹 [/]",
+                            border_style="bold green"
+                        )
+                    )
 
+                else:
+                    console.print(
+                        Panel.fit(
+                            "[bold red]❓ Unknown command. Type '/help' for options. 🤷❓[/]",
+                            border_style="bold red"
+                        )
+                    )
+            else:
+                if command != '':
+                    # Treat any non-command input as a chat message
+                    answer = client.chat(command)
+                    console.print(
+                        Panel.fit(
+                            Markdown(command, style='yellow'),
+                            title="[bold yellow]Question[/] 💬",
+                            title_align='left',
+                            border_style="bold yellow"
+                        )
+                    )
+                    console.print(
+                        Panel.fit(
+                            Markdown(answer),
+                            title="[bold green]Answer[/] 🤖✨",
+                            title_align='left',
+                            border_style="bold green"
+                        )
+                    )
+
+    except KeyboardInterrupt:
+        console.print()
+        console.print(
+            Panel.fit(
+                "[bold red]🛑 KeyboardInterrupt detected. Exiting the program... 😢👋💔[/]",
+                border_style="bold red"
+            )
+        )

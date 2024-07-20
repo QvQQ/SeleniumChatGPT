@@ -3,6 +3,7 @@
 
 import os
 import re
+import shutil
 import time
 from typing import Literal, Optional
 
@@ -53,10 +54,20 @@ class SeleniumChatGPT:
 
     ## 所有会话消息的 div 列表（包含用户消息）
     xpath_chat__conversation_turn_divs = "//div[starts-with(@class, 'react-scroll-to-bottom--css')]//div[starts-with(@data-testid, 'conversation-turn-')]"
-    ## 最后一条会话消息 (assistant) 的 外部 div
+
+    ## 最后一条会话消息 (assistant) 的 外部 div (包含空、错误、正常三种)
     xpath_chat__conversation_last_assistant_turn_outer_div = "//div[starts-with(@class, 'react-scroll-to-bottom--css')]//div[starts-with(@data-testid, 'conversation-turn-') and @data-scroll-anchor='true' and //div[@data-message-author-role='assistant']]"
-    ## 最后一条会话消息 (assistant) 的 内部 div
+    ## 最后一条会话消息 (assistant) 的 内部 div (正常消息)
     xpath_chat__conversation_last_assistant_turn_inner_div = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[contains(@class, 'markdown')]"
+    ## 最后一条会话消息 (assistant) 的 内部 div (错误消息)
+    xpath_chat__conversation_error_message_p = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[contains(@class, 'border-token-surface-error')]//p"
+
+    ## 指定会话消息 (assistant) 的 外部 div (包含空、错误、正常三种)
+    xpath_chat__conversation_specified_assistant_turn_outer_div = "//div[starts-with(@class, 'react-scroll-to-bottom--css')]//div[@data-testid='conversation-turn-{turn}' and @data-scroll-anchor='true' and //div[@data-message-author-role='assistant']]"
+    ## 指定会话消息 (assistant) 的 内部 div (正常消息)
+    xpath_chat__conversation_specified_assistant_turn_inner_div = xpath_chat__conversation_specified_assistant_turn_outer_div + "//div[contains(@class, 'markdown')]"
+    ## 指定会话消息 (assistant) 的 内部 div (错误消息)
+    xpath_chat__conversation_specified_error_message_p = xpath_chat__conversation_specified_assistant_turn_outer_div + "//div[contains(@class, 'border-token-surface-error')]//p"
 
     ## 最后一条会话消息 (assistant) 底部的四个按钮
     xpath_chat__conversation_last_assistant_turn_action_buttons = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[count(span)=4]/span"
@@ -65,8 +76,6 @@ class SeleniumChatGPT:
     ## 最后一条会话消息 (assistant) 底部的重新生成按钮 (假定在第 3 个)
     xpath_chat__conversation_last_assistant_turn_regenerate_button = xpath_chat__conversation_last_assistant_turn_action_buttons + "[3]"
 
-    ## 会话消息中错误信息的 p
-    xpath_chat__conversation_error_message_p = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[contains(@class, 'border-token-surface-error')]//p"
 
     ## 模型选择菜单
     xpath_chat__model_menu_div = "//div[@aria-haspopup='menu' and starts-with(@id, 'radix-:')]"
@@ -115,21 +124,29 @@ class SeleniumChatGPT:
         login_type: Literal['OpenAI', 'Microsoft'],
         capsolver_client_key: Optional[str] = None,
         headless: bool = False,
-        user_data_dir: Optional[str] = None
+        user_data_dir: Optional[str] = None,
     ):
         # 设置 logger
         self._logger = logging.getLogger(self.__class__.__name__)
 
         # console 宽度
-        self._console_width = 89
+        self._console_width = 104
 
         # chrome启动参数
         options = uc.ChromeOptions()
 
-        # 无痕及用户数据路径（应该设置到 driver 的参数里）
-        # options.add_argument('--incognito')
+        # 用户数据路径
         if user_data_dir:
+            profile_name = 'Profile_1'
+            user_data_dir = os.path.abspath(user_data_dir)
+            self._logger.info(f"[cyan]Using user_data_dir: {user_data_dir} with profile '{profile_name}'[/]")
+
             options.add_argument(f'--user-data-dir={user_data_dir}')
+            options.add_argument(f"--profile-directory={profile_name}")
+
+            # 尝试删除除了 {user-data-dir}/{profile-directory} 外的其他所有文件/目录
+            self._delete_except_profile(user_data_dir, profile_name)
+            self._logger.info(f"[cyan]Deleted all files except profile '{profile_name}'.[/]")
 
         # 禁用保存密码的提示框
         options.add_experimental_option("prefs", {
@@ -137,17 +154,32 @@ class SeleniumChatGPT:
             "profile.password_manager_enabled": False
         })
 
+        # 禁用共享内存（这个选项用于解决在运行Chrome时，由于/dev/shm（共享内存）空间不足而导致的问题。）
+        options.add_argument('--disable-dev-shm-usage')
+
         # 禁用信息栏
         options.add_argument("--disable-infobars")
 
         # 禁用自动填充
         options.add_argument("--disable-autofill")
 
+        # 设置窗口大小
+        options.add_argument("--window-size=640,660")
+
+        # 设置窗口初始位置
+        options.add_argument("--window-position=0,0")
+
+        # 检查是否存在http_proxy环境变量
+        http_proxy = os.getenv('http_proxy') or os.getenv('HTTP_PROXY')
+        if http_proxy:
+            self._logger.info(f"[cyan]Using proxy {http_proxy}[/]")
+            options.add_argument(f'--proxy-server={http_proxy}')
+
         # 加载 CapSolver 插件
         self._load_capsolver_extension(options, capsolver_client_key)
 
-        # 以 app 方式访问 ChatGPT 首页
-        # options.add_argument('--app=https://chatgpt.com')
+        # 以 app 方式访问 about:blank
+        options.add_argument('--app=http://example.com')
 
         # 开始加载 undetected chrome
         self._logger.info('[cyan]Loading undetected Chrome...')
@@ -163,20 +195,29 @@ class SeleniumChatGPT:
             self._logger.info(f'Found patched driver: {patched_driver}')
 
         # 实例化 driver
-        self._browser = uc.Chrome(
-            driver_executable_path=patched_driver,  # 如果不指定 executable_path 的位置，那么就会重复进行 Patch
-            options=options,
-            headless=headless,
-            log_level=logging.WARNING
-        )
+        try:
+            self._browser = uc.Chrome(
+                driver_executable_path=patched_driver,  # 如果不指定 executable_path 的位置，那么就会重复进行 Patch
+                options=options,
+                headless=headless,
+                log_level=logging.WARNING
+            )
+            self._logger.info('[cyan]Loaded Undetected chrome![/]')
+
+        except Exception as e:
+            self._logger.critical(f"[bold red]Error while loading Chrome: {repr(e)}[/bold red]")
+            raise e
 
         # 设置页面加载超时
         self._browser.set_page_load_timeout(120)
+        self._logger.info('[cyan]Page load timeout set to 120.[/]')
 
-        # 非无头模式下调整窗口大小和位置
-        if not headless:
-            self._browser.set_window_position(0, 0)  # 设置窗口位置
-            self._browser.set_window_size(700, 900)  # 设置窗口大小
+        # 无头模式下也可以调整窗口大小和位置
+        # self._browser.set_window_position(0, 0)  # 设置窗口位置
+        # self._logger.info('[cyan]Window position set to (0, 0).[/]')
+
+        # self._browser.set_window_size(640, 660)  # 设置窗口大小
+        # self._logger.info('[cyan]Window size set to (640, 660)[/]')
 
         # 设置已看过 (deprecated)
         # self.browser.execute_script(
@@ -186,11 +227,23 @@ class SeleniumChatGPT:
         # 配置 Helper
         self._helper = SeleniumDriverHelper(self._browser)
 
-        self._logger.info('[cyan]Loaded Undetected chrome![/]')
-
         # 登录过程
         self._login(email, password, login_type=login_type)
         self._logger.info('[bold green]ChatGPT is ready to interact![/]')
+
+    def _delete_except_profile(self, directory, profile):
+        """
+        删除除了用户 Profile 目录外的其他文件/目录，防止因为浏览器意外退出造成的 user_data_dir 损坏而无法启动。
+        """
+        # 遍历指定目录下的所有文件和目录
+        for item in os.listdir(directory):
+            item_path = os.path.join(directory, item)
+            # 如果是目录并且不是 'Profile_1'，则删除该目录及其内容
+            if os.path.isdir(item_path) and item != profile:
+                shutil.rmtree(item_path)
+            # 如果是文件或符号链接，则删除该文件或符号链接
+            elif os.path.isfile(item_path) or os.path.islink(item_path):
+                os.remove(item_path)
 
     def _load_capsolver_extension(self, options, capsolver_client_key=None):
         if capsolver_client_key is not None:
@@ -207,7 +260,7 @@ class SeleniumChatGPT:
             # 加载 chrome 插件
             options.add_argument(f'--load-extension={extension_directory}')
         else:
-            self._logger.info(f'No CapSolver client_key found! No extension will be loaded!')
+            self._logger.warning(f"No 'capsolver_client_key' found! No extension will be loaded!")
 
     def _replace_api_key(self, config_path, new_api_key):
 
@@ -273,7 +326,7 @@ class SeleniumChatGPT:
         self._logger.info("[bold]Login required. Initiating login process...[/]")
 
         # 等待登录页面加载完成
-        self._helper.wait_until_appear(By.XPATH, self.xpath_login__welcome_label)
+        self._helper.wait_until_appear(By.XPATH, self.xpath_login__welcome_label, label='WelcomeBackLabel')
 
         # 根据登录类型选择不同平台账号登录
         match login_type:
@@ -322,10 +375,8 @@ class SeleniumChatGPT:
                     # 情景二：发生了 Oops 错误
                     self._logger.error("Current situation is 'OopsError' stage.")
                     # 保存证据
-                    screenshot_path = f'{time.strftime("%y%m%d-%H%M%")}-{login_type}-OopsError.png'
-                    self._browser.save_screenshot(f'{screenshot_path}')
-                    # 重新登录
-                    self._logger.warning(f"[bold red]Oops! Re-logging in... Please check {screenshot_path} for more details.[/]")
+                    self._logger.warning("Oops! Re-logging in...")
+                    self._helper.save_debug_screenshot(f'{login_type}-OopsError')
                     # 抛出异常，被 tenacity 捕获重试
                     raise RuntimeError('Oops')
                 case ('CloudFlareVerification', _):
@@ -336,17 +387,20 @@ class SeleniumChatGPT:
                     # 重新判断当前页面（正常情况下应当会跳转到 PromptTextarea）
                     self._logger.info("[bold][yellow]CloudFlare Verification[/] process completed.[/]")
                     continue
-                case('PromptTextarea', _):
+                case ('PromptTextarea', _):
                     # 情景四：直接进入了对话界面
                     self._logger.info("Current situation is 'PromptTextarea' stage.")
                     self._logger.info("[bold]Skipping...[/]")
                     break
-                case(None, None):
+                case (None, None):
                     # 四种情景都不存在，抛出异常
-                    raise RuntimeError(f"Could not find any specified label while trying to login!")
+                    self._logger.error("Could not find any specified label while trying to login!")
+                    self._helper.save_debug_screenshot('NoLabelFound')
+                    raise RuntimeError("Label not found!")
         else:
             # 最大尝试次数尝试完毕，仍然没有成功登录到会话界面
             self._logger.error(f"[bold red]Max retries meet! Could not find any specified label while trying to login![/]")
+            self._helper.save_debug_screenshot('MaxLoginRetriesMeet')
             raise RuntimeError("Login failed. Max retries meet.")
 
         self._logger.info("[bold green]Successfully logged in![/]")
@@ -421,7 +475,9 @@ class SeleniumChatGPT:
 
         # 是否有该属性值
         if is_temporary is None:
-            raise RuntimeError(f"[bold red]Please check the attributes of 'self.xpath_chat__model_temporary_div', the original 'aria-checked' is no longer valid.[/]")
+            self._logger.error(f"[bold red]Please check the attributes of 'self.xpath_chat__model_temporary_div', the original 'aria-checked' is no longer valid.[/]")
+            self._helper.save_debug_screenshot('TemporaryMode')
+            raise RuntimeError(f"The attributes of 'self.xpath_chat__model_temporary_div' not found!")
 
         # 输出当前状态
         value_map = {True: '[bold green]ON[/]', False: '[bold red]OFF[/]'}
@@ -455,10 +511,21 @@ class SeleniumChatGPT:
         self._logger.info(f"[bold]Attempting to regenerate the answer...[/]")
 
         # 点击最后一条 assistant 消息底部的重新生成按钮
-        self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_regenerate_button)
+        self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_regenerate_button, label='LastTurnRegenerateButton')
 
+        # !!! 也存在没出现中止生成按钮，直接出现了红框错误消息的情况（需要同步等待） !!!
         # 等待中止生成按钮出现（代表开始生成）
-        self._helper.wait_until_appear(By.XPATH, self.xpath_chat__stop_button, label='StopButton')
+        # self._helper.wait_until_appear(By.XPATH, self.xpath_chat__stop_button, label='StopButton')
+        label, element = self._helper.wait_for_mutually_exclusive_elements(
+            by=By.XPATH,
+            queries=[self.xpath_chat__stop_button, self.xpath_chat__conversation_error_message_p],
+            labels=['StopButton', 'ConversationErrorMessage']
+        )
+        if label == 'ConversationErrorMessage':
+            # 出问题咧，红色边框消息
+            self._logger.error(element.get_attribute('outerHTML'))
+            self._helper.save_debug_screenshot('ConversationErrorMessage-1')
+            raise RuntimeError(f"Error occurred while generating response!")
 
         # 等待中止生成按钮消失（代表生成结束）
         self._helper.wait_until_disappear(By.XPATH, self.xpath_chat__stop_button, timeout_duration=180, label='StopButton')
@@ -473,19 +540,21 @@ class SeleniumChatGPT:
         if error_message_p := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_error_message_p, ignore_failure=True, label='ConversationErrorMessage'):
             # 有了红色边框的错误消息
             self._logger.error(error_message_p.get_attribute('outerHTML'))
+            self._helper.save_debug_screenshot('ConversationErrorMessage-2')
             raise RuntimeError(f"Error occurred while generating response!")
 
         # 如果没有错误消息，那么查看是否有重新生成按钮（的确存在无报错但生成失败的情况）
         if regenerate_button := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__error_regenerate_button, ignore_failure=True, label='RegenerateButton'):
             # 没有红框，但还是生成错误
             self._logger.error(f"[bold red]'RegenerateButton' found. Something is wrong![/]")
+            self._helper.save_debug_screenshot('RegenerateButton')
             raise RuntimeError(f"Error occurred while generating response!")
 
         # 生成没问题，等待答案出现（也的确存在已经出现了 assistant 的聊天气泡但其内容为空的情况，此时 answer 由于等待的是内部的 markdown 部分，还没有出现，所以不存在）
-        # answer_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_inner_div, timeout_duration=180, label='Answer')
+        answer_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_inner_div, label='Answer')
 
         # 等待不如早点重开
-        self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_inner_div, label='Answer')
+        # self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_inner_div, label='Answer')
 
         # 点击复制按钮（不直接使用`answer_div.text`获取是因为，这样获取到的会将 bullet points 的序号丢掉）
         # answer = answer_div.text
@@ -498,7 +567,7 @@ class SeleniumChatGPT:
 
         return answer
 
-    def chat(self, question) -> str:
+    def chat(self, question: str) -> str:
         """
         Sends a question and retrieves the answer from the ChatGPT system.
 
@@ -521,6 +590,9 @@ class SeleniumChatGPT:
         self._logger.info(f"[yellow]{question}[/]")
         self._logger.info(f"[yellow]{'-' * (self._console_width - 27)}[/]")
 
+        # 先确保页面加载完毕，确实存在 PromptTextarea
+        self._helper.wait_until_appear(By.XPATH, self.xpath_chat__prompt_textarea, label='PromptTextarea')
+
         # 获取当前 assistant message 的 turn 数，与后面作比较，确保的确生成了新答案
         if last_turn_div := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_outer_div, ignore_failure=True, label='TurnsOfAssistantMessage'):
             # 之前有过对话，turn 存在
@@ -532,12 +604,15 @@ class SeleniumChatGPT:
             last_turn = 1  # system prompt
             self._logger.info(f"Last conversation turn not found! Assuming 'last_turn' = {last_turn} ...")
 
+        # 应当出现的 turn
+        expected_turn = last_turn + 2
+
         # 向文本框输入内容
         self._helper.find_then_input_or_fail(
             by=By.XPATH,
             query=self.xpath_chat__prompt_textarea,
             text=question,
-            input_method='split_lines',
+            input_method='copy_paste',
             label='PromptTextarea',
         )
 
@@ -545,43 +620,75 @@ class SeleniumChatGPT:
         self._helper.wait_until_disappear(By.XPATH, self.xpath_chat__send_button_disabled, label='SendButtonDisabled')
         self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__send_button_enabled, label='SendButtonEnabled')
 
-        # 等待中止生成按钮出现（代表开始生成）
-        self._helper.wait_until_appear(By.XPATH, self.xpath_chat__stop_button, label='StopButton')
+        # 直接等待 specified turn 出现（代表开始生成，无论是报错还是正常消息），或是 Regenerate 按钮，这三种情况
+        max_tries = 10
+        for loop_count in range(max_tries):  # 最多循环 max_tries 次
+            # 非首次尝试时，进行提醒
+            if loop_count != 0:
+                self._logger.warning(f"[bold yellow]Loop count {loop_count} times![/]")
+
+            match self._helper.wait_for_mutually_exclusive_elements(
+                by=By.XPATH,
+                queries=[
+                    self.xpath_chat__conversation_specified_assistant_turn_inner_div.format(turn=expected_turn),
+                    self.xpath_chat__conversation_specified_error_message_p.format(turn=expected_turn),
+                    self.xpath_chat__error_regenerate_button
+                ],
+                labels=[
+                    'NormalMessage',
+                    'ErrorMessage',
+                    'RegenerateButton'
+                ]
+            ):
+                case ('NormalMessage', _):
+                    # 情景一：开始正常生成消息
+                    self._logger.info("Current situation is 'NormalMessage' stage.")
+                    # 点击到达底部按钮
+                    self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__scroll_to_bottom_button, ignore_failure=True, label='ScrollToBottomButton')
+                    break
+                case ('ErrorMessage', error_message_p):
+                    # 情景二：出现了红框错误消息
+                    self._logger.info("Current situation is 'ErrorMessage' stage.")
+                    self._logger.error(error_message_p.get_attribute('outerHTML'))
+                    self._helper.save_debug_screenshot('ConversationErrorMessage-2')
+                    raise RuntimeError(f"Error occurred while generating response!")
+
+                case ('RegenerateButton', _):
+                    # 情景三：未出现上面两个消息，没有聊天气泡出现，直接出现了 重新生成 按钮
+                    self._logger.info("Current situation is 'RegenerateButton' stage.")
+                    self._logger.warning("'RegenerateButton' found. Something is wrong!")
+                    self._helper.save_debug_screenshot('RegenerateButton')
+                    # raise RuntimeError(f"Error occurred while generating response!")
+                    self._logger.warning('[bold yellow]Regenerating...[/]')
+                    continue
+        else:
+            # 最大尝试次数尝试完毕，仍然没有成功生成消息
+            self._logger.error(f"[bold red]Max retries meet! Could not generate normal response![/]")
+            self._helper.save_debug_screenshot('MaxRegenerateRetriesMeet')
+            raise RuntimeError("Regenerate failed. Max retries meet.")
 
         # 等待中止生成按钮消失（代表生成结束）
         self._helper.wait_until_disappear(By.XPATH, self.xpath_chat__stop_button, timeout_duration=180, label='StopButton')
-
-        # 点击到达底部按钮
-        self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__scroll_to_bottom_button, ignore_failure=True, label='ScrollToBottomButton')
-
-        # 等待气泡中的内容稳定
-        self._helper.check_element_stability(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_outer_div, check_period=1, confirmation_time=5, label='LastMessage')
-
-        # 断言 new_last_turn == last_turn + 2（代表的确产生了新的 assistant 聊天气泡）
-        new_last_turn_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_outer_div, label='NewTurnsOfAssistantMessage')
-        new_data_testid = new_last_turn_div.get_attribute('data-testid')
-        assert isinstance(new_data_testid, str) and new_data_testid.startswith('conversation-turn-'), f'Invalid data testid: {new_data_testid}, should start with "conversation-turn-"!'
-        new_last_turn = int(new_data_testid.split('-')[-1])
-        assert new_last_turn == last_turn + 2, f'Invalid turn number! last_turn = {last_turn}, expected new_last_turn = {last_turn + 2}, got {new_last_turn}!'
-        self._logger.info(f"New last conversation turns: {new_last_turn}")
 
         # 查看是否有错误消息
         if error_message_p := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_error_message_p, ignore_failure=True, label='ConversationErrorMessage'):
             # 有了红色边框的错误消息
             self._logger.error(error_message_p.get_attribute('outerHTML'))
-            raise RuntimeError(f"[bold red]Error occurred while generating response![/]")
+            self._helper.save_debug_screenshot('ConversationErrorMessage-2')
+            raise RuntimeError(f"Error occurred while generating response!")
 
         # 如果没有错误消息，那么查看是否有重新生成按钮（的确存在无报错但生成失败的情况）
         if regenerate_button := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__error_regenerate_button, ignore_failure=True, label='RegenerateButton'):
             # 没有红框，但还是生成错误
             self._logger.error(f"[bold red]'RegenerateButton' found. Something is wrong![/]")
+            self._helper.save_debug_screenshot('RegenerateButton')
             raise RuntimeError(f"Error occurred while generating response!")
 
-        # 生成没问题，等待答案出现（也的确存在已经出现了 assistant 的聊天气泡但其内容为空的情况，此时 answer 由于等待的是内部的 markdown 部分，还没有出现，所以不存在）
-        # answer_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_inner_div, timeout_duration=180, label='Answer')
+        # 生成没问题，等待答案出现
+        answer_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_specified_assistant_turn_inner_div.format(turn=expected_turn), label='Answer')
 
-        # 等待不如早点重开
-        self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_inner_div, label='Answer')
+        # 点击到达底部按钮
+        self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__scroll_to_bottom_button, ignore_failure=True, label='ScrollToBottomButton')
 
         # 点击复制按钮（不直接使用`answer_div.text`获取是因为，这样获取到的会将 bullet points 的序号丢掉）
         # answer = answer_div.text
