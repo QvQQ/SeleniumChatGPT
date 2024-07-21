@@ -78,6 +78,8 @@ class SeleniumChatGPT:
 
     ## 模型选择菜单
     xpath_chat__model_menu_div = "//div[@aria-haspopup='menu' and starts-with(@id, 'radix-:')]"
+    ## 模型选择菜单当前显示的模型名
+    xpath_chat__model_menu_displayed_name_span = xpath_chat__model_menu_div + "/div/span"
     ## 模型选择菜单中的模型名
     xpath_chat__model_menuitem_div = "//div[@role='menu' and @data-state='open']//div[@role='menuitem']//div[text()='{}']"
     xpath_chat__model_menuitem_divs = "//div[@role='menu' and @data-state='open']//div[@role='menuitem']//div[not(@class) and text()]"
@@ -86,6 +88,10 @@ class SeleniumChatGPT:
 
     ## 开启新会话按钮 (假定是模型选择菜单的下一个兄弟节点)
     xpath_chat__new_chat_div = xpath_chat__model_menu_div + '/following-sibling::*[1]//button'
+
+    ## 临时会话标识
+    xpath_chat__temporary_chat_in_presentation_div = "//div[@role='presentation']//div[text()='Temporary Chat']"
+    xpath_chat__temporary_chat_in_status_bar_div = "//div[text()='Temporary Chat' and not(@class)]"
 
     # 登录页面 ############################################################
     ## 欢迎标识
@@ -272,15 +278,15 @@ class SeleniumChatGPT:
 
         # 在程序运行目录创建锁文件
         lock_path = os.path.abspath(".file_lock")
-    
+
         # 创建一个文件锁
         lock = FileLock(lock_path, timeout=1)
-    
+
         try:
             with lock:
                 with open(config_path, 'r', encoding='utf-8') as file:
                     content = file.read()
-    
+
                 current_api_key_match = re.search(r"apiKey:\s*'(.+?)',", content)
                 if current_api_key_match:
                     current_api_key = current_api_key_match.group(1)
@@ -288,13 +294,13 @@ class SeleniumChatGPT:
                         new_content = re.sub(r"apiKey:\s*'.+?',", f"apiKey: '{new_api_key}',", content)
                         with open(config_path, 'w', encoding='utf-8') as file:
                             file.write(new_content)
-    
+
                         self._logger.info("[bold green]API key has been successfully replaced.[/]")
                     else:
                         self._logger.info("[bold]The new API key is the same as the current one. No replacement made.[/]")
                 else:
                     self._logger.error("[bold red]No existing API key found in the file.[/]")
-    
+
         except Timeout:
             # 如果锁被其他进程占用，则记录警告信息
             self._logger.warning("[bold red]Lock acquisition failed. Another instance might be modifying the file.[/]")
@@ -458,22 +464,72 @@ class SeleniumChatGPT:
 
         self._logger.info('[bold][blue]Microsoft[/] login process is about to complete.[/]')
 
-    def switch_model(self, target_model: str):
+    def _get_current_model(self) -> str:
+        self._logger.info("Checking which model is currently being used...")
+
+        # 获取模型选择菜单当前显示的模型名（可能为'4o'、'4o mini'、'4'），加上 'GPT-' 前缀
+        model = 'GPT-' + self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__model_menu_displayed_name_span, label='ModelDisplayedName').text
+        assert model in ['GPT-4o', 'GPT-4o mini', 'GPT-4'], f"Unexpected model: '{model}'!"
+
+        # 输出当前状态
+        self._logger.info(f"[bold]Current model: [green]{model}[/].[/]")
+
+        return model
+
+    def _get_current_temporary_mode(self) -> bool:
+        self._logger.info("Checking if 'Temporary Mode' is on or not...")
+
+        # 三个条件
+        if 'temporary-chat=true' in self._browser.current_url or \
+                self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__temporary_chat_in_presentation_div, ignore_failure=True, label='TemporaryChat-1') or \
+                self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__temporary_chat_in_status_bar_div, ignore_failure=True, label='TemporaryChat-2'):
+            is_temporary = True
+        else:
+            is_temporary = False
+
+        # 输出当前状态
+        self._logger.info(f"[bold]Current value: {'[bold green]ON[/]' if is_temporary else '[bold red]OFF[/]'}.[/]")
+
+        return is_temporary
+
+    def reset_to_specified_mode(self, model: Literal['GPT-4o', 'GPT-4o mini', 'GPT-4'], temporary_mode: bool = True) -> None:
+        # Logging the entry into the specified mode
+        self._logger.info(f"[bold]Diving into [green]{model}[/] model with temporary mode {'[green]ON[/]' if temporary_mode else '[red]OFF[/]'}...[/]")
+
+        # Fill the url with parameters
+        url = f"https://chatgpt.com/?temporary-chat={str(temporary_mode).lower()}&model={model.lower().replace(' ', '-')}"
+        self._logger.info(f"[bold]URL: {url}[/]")
+
+        # Navigating to the specified URL with parameters
+        self._browser.get(url)
+
+        # Logging the completion of the mode reset operation
+        self._logger.info(f"[bold]Successfully reset to [green]{model}[/] model with temporary mode {'[green]ON[/]' if temporary_mode else '[red]OFF[/]'}.[/]")
+
+    def switch_model(self, target_model: Literal['GPT-4o', 'GPT-4o mini', 'GPT-4']):
         """
         Switch the model for ChatGPT+ users.
 
         Args:
-            target_model: str = The name of the model, either GPT-3.5 or GPT-4
+            target_model: str = The name of the model in ['GPT-4o', 'GPT-4o mini', 'GPT-4']
 
         Returns:
             None
         """
-        # 点击模型选择
+        current_model = self._get_current_model()
+        if target_model == current_model:
+            self._logger.info(f"[cyan]The model already set to [bold green]{target_model}[/]. Skipping...[/]")
+            return
+
         self._logger.info('[bold]Obtaining available models...[/]')
+
+        # 点击模型选择
         self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_menu_div, label='Model Menu')
         self._helper.wait_until_appear(By.XPATH, self.xpath_chat__model_menuitem_divs, label='Model Menu Item')
+
         # 获取所有模型的 div
         models = self._browser.find_elements(By.XPATH, self.xpath_chat__model_menuitem_divs)
+
         # 提取所有模型名称（直接用.text的话会获取子div中的文本）
         MODEL_NAMES = [self._browser.execute_script("return arguments[0].childNodes[0].nodeValue;", x) for x in models]
         assert target_model in MODEL_NAMES, f"Invalid model name: {target_model}, should be one of the following: {MODEL_NAMES}"
@@ -486,43 +542,43 @@ class SeleniumChatGPT:
 
         self._logger.info(f"[bold]Model changed to '{target_model}'.[/]")
 
-    def switch_temporary_mode(self, temporary: bool):
+    def switch_temporary_mode(self, target_mode: bool):
         # 先获取当前的状态
-        self._logger.info(f"Checking if 'Temporary Mode' is on or not...")
-        self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_menu_div, label='Model Menu')
-        element = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__model_temporary_div, label='Temporary Mode')
-        value_map = {True: True, False: False, 'true': True, 'false': False, '': None, None: None}
-        is_temporary = value_map[element.get_attribute('aria-checked')]
-        self._logger.info(f"[dim]element.get_attribute('aria-checked'): {is_temporary}[/]")
+        is_temporary = self._get_current_temporary_mode()
 
-        # 是否有该属性值
-        if is_temporary is None:
-            self._logger.error(f"[bold red]Please check the attributes of 'self.xpath_chat__model_temporary_div', the original 'aria-checked' is no longer valid.[/]")
-            self._helper.save_debug_screenshot('TemporaryMode')
-            raise RuntimeError(f"The attributes of 'self.xpath_chat__model_temporary_div' not found!")
-
-        # 输出当前状态
-        value_map = {True: '[bold green]ON[/]', False: '[bold red]OFF[/]'}
-        self._logger.info(f"[bold]Current value: {value_map[is_temporary]}")
+        # 下面注释部分是通过点击模型选择菜单来获取 Temporary Mode 开关状态的
+        # self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_menu_div, label='ModelMenu')
+        # element = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__model_temporary_div, label='TemporaryMode')
+        # value_map = {True: True, False: False, 'true': True, 'false': False, '': None, None: None}
+        # is_temporary = value_map[element.get_attribute('aria-checked')]
+        # self._logger.info(f"[dim]element.get_attribute('aria-checked'): {is_temporary}[/]")
+        #
+        # # 是否有该属性值
+        # if is_temporary is None:
+        #     self._logger.error(f"[bold red]Please check the attributes of 'self.xpath_chat__model_temporary_div', the original 'aria-checked' is no longer valid.[/]")
+        #     self._helper.save_debug_screenshot('TemporaryMode')
+        #     raise RuntimeError(f"The attributes of 'self.xpath_chat__model_temporary_div' not found!")
+        #
+        # 在判断不需要切换时，要再次点击模型菜单，收回菜单
+        # self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__model_menu_div, label='Model Menu')
 
         # 判断是否需要切换
-        target_mode = value_map[temporary]
-        if is_temporary == temporary:
-            # 再次点击模型菜单，收回菜单
-            self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_menu_div, label='Model Menu')
-            self._logger.info(f"[cyan]The 'Temporary Mode' already set to {target_mode}. Skipping...[/]")
+        format_str = '[bold green]ON[/]' if target_mode else '[bold red]OFF[/]'
+        if is_temporary == target_mode:
+            self._logger.info(f"[cyan]The 'Temporary Mode' already set to {format_str}. Skipping...[/]")
             return
         else:
-            self._logger.info(f"Attempting to trigger 'Temporary Mode' to {target_mode}...")
-            element.click()
-            self._logger.info(f"[bold]The 'Temporary Mode' set to {target_mode} successfully![/]")
+            self._logger.info(f"Attempting to trigger 'Temporary Mode' to {format_str}...")
+            self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_menu_div, label='ModelMenu')
+            self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_temporary_div, label='TemporaryMode')
+            self._logger.info(f"[bold]The 'Temporary Mode' set to {format_str} successfully![/]")
 
     def new_chat(self):
         """
         Function to close the current thread and start a new one
         """
         self._logger.info(f"[bold]Attempting to start a 'New Chat'...[/bold]")
-        self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__new_chat_div, label='NewChat')
+        self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__new_chat_div, label='NewChat')
         self._helper.wait_until_appear(By.XPATH, self.xpath_chat__prompt_textarea, label='PromptTextarea')
         self._logger.info(f"[bold]The 'New Chat' already started![/]")
 
@@ -533,15 +589,13 @@ class SeleniumChatGPT:
         self._logger.info(f"[bold]Attempting to regenerate the answer...[/]")
 
         # 获取当前 assistant message 的 turn 数，与后面作比较，确保的确生成了新答案
-        if last_turn_div := self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_outer_div, ignore_failure=True, label='TurnsOfAssistantMessage'):
-            # 之前有过对话，turn 存在
-            data_testid = last_turn_div.get_attribute('data-testid')
-            assert isinstance(data_testid, str) and data_testid.startswith('conversation-turn-'), f'Invalid data testid: {data_testid}, should start with "conversation-turn-"!'
-            last_turn = int(data_testid.split('-')[-1])
-            self._logger.info(f"Last conversation turns: {last_turn}")
-        else:
-            last_turn = 1  # system prompt
-            self._logger.info(f"Last conversation turn not found! Assuming 'last_turn' = {last_turn} ...")
+        last_turn_div = self._helper.wait_until_appear(By.XPATH, self.xpath_chat__conversation_last_assistant_turn_outer_div, label='TurnsOfAssistantMessage')
+
+        # 之前有过对话，turn 存在（因为是 regenerate，所以这一步必须成立）
+        data_testid = last_turn_div.get_attribute('data-testid')
+        assert isinstance(data_testid, str) and data_testid.startswith('conversation-turn-'), f'Invalid data testid: {data_testid}, should start with "conversation-turn-"!'
+        last_turn = int(data_testid.split('-')[-1])
+        self._logger.info(f"Last conversation turns: {last_turn}")
 
         # !!! 在 Regenerate 过程中，应当出现的 turn 与之前一致
         expected_turn = last_turn

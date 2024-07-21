@@ -187,7 +187,7 @@ class SeleniumDriverHelper:
                 timeout_duration
             ).until(
                 EC.any_of(
-                    *[EC.visibility_of_element_located((by, query)) for query in queries]
+                    *[EC.visibility_of_element_located((by, query)) for query in queries],
                 )
             )
             self.logger.info("[dim]An element has been found. Determining which one it is.[/]")

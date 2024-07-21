@@ -95,8 +95,6 @@ def refresh_if_needed() -> None:
         if client:
             console.log(f"[bold green][Flask][/] [bold yellow]Last request time: {time.strftime('%x %X', time.localtime(app.config['LAST_REQUEST_TIME']))}. Refreshing...[/]")
             client.refresh_page()
-    else:
-        console.log(f"[bold green][Flask][/] Last request time: {time.strftime('%x %X', time.localtime(app.config['LAST_REQUEST_TIME']))}.")
 
 
 # ------------------------------------------------------------------------------------
@@ -122,6 +120,24 @@ def start_client():
             user_data_dir=data.user_data_dir,
         )
         return jsonify({"code": 200, "message": f"Client created.", "data": {}}), 200
+
+    except Exception as e:
+        return handle_error(e)
+
+
+@app.route('/reset_to_specified_mode', methods=['POST'])
+def reset_to_specified_mode():
+
+    if not client:
+        return jsonify({"code": 404, "message": "Client not found", "data": {}}), 404
+
+    try:
+        # 解析传入参数
+        data = Box(request.get_json(), frozen_box=True)
+
+        # 跳转页面到特定模型和临时模式
+        client.reset_to_specified_mode(model=data.model, temporary_mode=data.temporary_mode)
+        return jsonify({"code": 200, "message": f"Model reset to {data.model} with temporary mode {'ON' if data.temporary_mode else 'OFF'}.", "data": {}}), 200
 
     except Exception as e:
         return handle_error(e)
