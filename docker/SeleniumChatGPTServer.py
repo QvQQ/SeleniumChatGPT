@@ -95,6 +95,8 @@ def refresh_if_needed() -> None:
         if client:
             console.log(f"[bold green][Flask][/] [bold yellow]Last request time: {time.strftime('%x %X', time.localtime(app.config['LAST_REQUEST_TIME']))}. Refreshing...[/]")
             client.refresh_page()
+    else:
+        console.log(f"[bold green][Flask][/] Last request time: {time.strftime('%x %X', time.localtime(app.config['LAST_REQUEST_TIME']))}.")
 
 
 # ------------------------------------------------------------------------------------
@@ -165,10 +167,12 @@ def switch_temporary_mode():
 def new_chat():
 
     if not client:
-        refresh_if_needed()
         return jsonify({"code": 404, "message": "Client not found", "data": {}}), 404
 
     try:
+        # 刷新页面（如果需要的话）
+        refresh_if_needed()
+
         # 重置会话，开启新会话
         client.new_chat()
         return jsonify({"code": 200, "message": f"The 'New Chat' started.", "data": {}}), 200
