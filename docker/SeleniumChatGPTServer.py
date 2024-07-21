@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import os
-import signal
 import subprocess
+import time
 from typing import Optional
 
 # for logging
@@ -17,6 +17,8 @@ from flask import Flask, request, jsonify
 from SeleniumChatGPT import SeleniumChatGPT
 
 app = Flask(__name__)
+app.config['LAST_REQUEST_TIME'] = time.time()
+app.config['MAX_IDLE_SECONDS'] = 3600
 
 client: Optional[SeleniumChatGPT] = None
 
@@ -81,11 +83,27 @@ def handle_error(e: BaseException):
 
 
 # ------------------------------------------------------------------------------------
+# 更新上次请求时间
+@app.after_request
+def after_request_func(response):
+    app.config['LAST_REQUEST_TIME'] = time.time()
+    return response
+
+
+def refresh_if_needed() -> None:
+    if time.time() - app.config['LAST_REQUEST_TIME'] > app.config['MAX_IDLE_SECONDS']:
+        if client:
+            console.log(f"[bold green][Flask][/] [bold yellow]Last request time: {time.strftime('%x %X', time.localtime(app.config['LAST_REQUEST_TIME']))}. Refreshing...[/]")
+            client.refresh_page()
+
+
+# ------------------------------------------------------------------------------------
 @app.route('/start_client', methods=['POST'])
 def start_client():
     global client
 
     if client:
+        refresh_if_needed()
         return jsonify({"code": 201, "message": "Client already exists!", "data": {}}), 201
 
     try:
@@ -147,6 +165,7 @@ def switch_temporary_mode():
 def new_chat():
 
     if not client:
+        refresh_if_needed()
         return jsonify({"code": 404, "message": "Client not found", "data": {}}), 404
 
     try:

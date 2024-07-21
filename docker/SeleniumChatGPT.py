@@ -125,6 +125,10 @@ class SeleniumChatGPT:
         headless: bool = False,
         user_data_dir: Optional[str] = None,
     ):
+        # 存储 email 和 password 和 login_type
+        self._email, self._password = email, password
+        self._login_type = login_type
+
         # 设置 logger
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -231,8 +235,7 @@ class SeleniumChatGPT:
         self._helper = SeleniumDriverHelper(self._browser)
 
         # 登录过程
-        self._login(email, password, login_type=login_type)
-        self._logger.info('[bold green]ChatGPT is ready to interact![/]')
+        self._login()
 
     def _delete_except_profile(self, directory, profile):
         """
@@ -304,16 +307,25 @@ class SeleniumChatGPT:
             self._logger.error(f"[bold red]An error occurred: {e}[/]")
             raise
 
+    def refresh_page(self):
+        self._login()
+
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(5),
         wait=tenacity.wait_fixed(30),
         retry=tenacity.retry_if_exception_message(match='Oops')
     )
-    def _login(self, email, password, login_type):
+    def _login(self):
 
-        # 进入 ChatGPT 页面
-        self._logger.info("[bold]Entering [green]ChatGPT[/] website...[/]")
-        self._browser.get(url='https://chatgpt.com')
+        # 进入或刷新 ChatGPT 页面
+        if self._browser.current_url.startswith('https://chatgpt.com'):
+            # 已经在 ChatGPT 页面了，进行刷新
+            self._logger.info("[bold]Refreshing into [green]ChatGPT[/] website...[/]")
+            self._browser.refresh()
+        else:
+            # 首次进入 ChatGPT 页面
+            self._logger.info("[bold]Entering [green]ChatGPT[/] website...[/]")
+            self._browser.get(url='https://chatgpt.com')
 
         # 检查登录状态
         self._logger.info("Checking login status...")
@@ -321,8 +333,14 @@ class SeleniumChatGPT:
         # 一种是右上的，不处在登录态就会出现（但只有在有 Welcome 的登录按钮时，才会出现data-testid属性）
         if not self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__welcome_login_button, ignore_failure=True, label='WelcomeLogin') and \
            not self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__login_button, ignore_failure=True, label='Login'):
-            # 不需要登录
-            self._logger.info("[bold green]Already logged in![/]")
+            if self._helper.find_element_or_fail(By.XPATH, self.xpath_chat__prompt_textarea, ignore_failure=True, label='PromptTextarea'):
+                # 不需要登录
+                self._logger.info("[bold green]Already logged in![/]")
+            else:
+                # 没有出现登录按钮，但也没有出现输入框，可能进入了 CloudFlare 的验证
+                self._logger.error("[bold red]Login status check failed![/]")
+                self._helper.save_debug_screenshot('LoginStatus-Error')
+                raise RuntimeError('Login status check failed.')
             return
 
         # 需要登录
@@ -332,14 +350,14 @@ class SeleniumChatGPT:
         self._helper.wait_until_appear(By.XPATH, self.xpath_login__welcome_label, label='WelcomeBackLabel')
 
         # 根据登录类型选择不同平台账号登录
-        match login_type:
+        match self._login_type:
             case 'OpenAI':
-                self._login_via_openai(email, password)
+                self._login_via_openai(self._email, self._password)
             case 'Microsoft':
-                self._login_via_microsoft(email, password)
+                self._login_via_microsoft(self._email, self._password)
             case _:
-                self._logger.error(f"[bold red]Invalid login type: {login_type}.[/]")
-                raise ValueError(f"Invalid login type: {login_type}.")
+                self._logger.error(f"[bold red]Invalid login type: {self._login_type}.[/]")
+                raise ValueError(f"Invalid login type: {self._login_type}.")
 
         # 等待会话界面出现（或 cf 的验证）
         max_tries = 10
@@ -364,7 +382,7 @@ class SeleniumChatGPT:
                     'PromptTextarea'
                 ]
             ):
-                case ('StaySignedIn', _) if login_type == 'Microsoft':
+                case ('StaySignedIn', _) if self._login_type == 'Microsoft':
                     # 情景一：提示保持登录状态 (仅在微软登录时出现)
                     self._logger.info("Current situation is 'StaySignedIn' stage.")
                     # 查找 "DontShowAgain" checkbox 并点击
@@ -379,7 +397,7 @@ class SeleniumChatGPT:
                     self._logger.error("Current situation is 'OopsError' stage.")
                     # 保存证据
                     self._logger.warning("Oops! Re-logging in...")
-                    self._helper.save_debug_screenshot(f'{login_type}-OopsError')
+                    self._helper.save_debug_screenshot(f'{self._login_type}-OopsError')
                     # 抛出异常，被 tenacity 捕获重试
                     raise RuntimeError('Oops')
                 case ('CloudFlareVerification', _):
@@ -407,6 +425,7 @@ class SeleniumChatGPT:
             raise RuntimeError("Login failed. Max retries meet.")
 
         self._logger.info("[bold green]Successfully logged in![/]")
+        self._logger.info('[bold green]ChatGPT is now ready to interact![/]')
 
     def _login_via_openai(self, email, password):
         self._logger.info("[bold]Logging in via [green]OpenAI[/] account...[/]")
