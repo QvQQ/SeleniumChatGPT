@@ -65,8 +65,11 @@ RUN python3 -m venv /home/seluser/venv \
     && pip install --no-cache-dir -r /home/seluser/requirements.txt
 
 # 使用 sed 命令删除指定行
-RUN sudo sed -i '/options.add_argument("--window-size=1920,1080")/d' /home/seluser/venv/lib/python3.11/site-packages/undetected_chromedriver/__init__.py \
-    && sudo sed -i '/options.add_argument("--start-maximized")/d' /home/seluser/venv/lib/python3.11/site-packages/undetected_chromedriver/__init__.py
+RUN sudo sed -i \
+    -e '/options.add_argument("--window-size=1920,1080")/d' \
+    -e '/options.add_argument("--start-maximized")/d' \
+    /home/seluser/venv/lib/python3.11/site-packages/undetected_chromedriver/__init__.py
+
 
 # 运行 undetected_chromedriver 的 Patcher 自动下载 Chromedriver
 RUN sudo /home/seluser/venv/bin/python3 -c "from undetected_chromedriver import Patcher; import logging; logging.basicConfig(level='DEBUG'); Patcher(executable_path='/usr/bin/chromedriver').auto()"

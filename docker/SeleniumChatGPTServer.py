@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import os
-import subprocess
+import signal
+# import subprocess
 import time
 from typing import Optional
 
@@ -17,6 +18,7 @@ from flask import Flask, request, jsonify
 from SeleniumChatGPT import SeleniumChatGPT
 
 app = Flask(__name__)
+app.config['TEARDOWN'] = False
 app.config['LAST_REQUEST_TIME'] = time.time()
 app.config['MAX_IDLE_SECONDS'] = 3600
 
@@ -67,11 +69,17 @@ def shutdown():
     else:
         # 退出浏览器失败了，只能关掉自己了
         console.log("[bold green][Flask][/] [bold red]Client reset failed![/]")
-        console.log("[bold green][Flask][/] [bold red]Shutting down the server...[/]")
-        # os.kill(os.getpid(), signal.SIGINT)  # noqa
-        subprocess.Popen(f'sleep 2; kill -SIGINT {os.getpid()}', shell=True)  # Popen 非阻塞，run 阻塞
+        # subprocess.Popen(f'sleep 2; kill -2 {os.getpid()}', shell=True)  # Popen 非阻塞，run 阻塞
+        app.config['TEARDOWN'] = True
 
     return jsonify({"code": 200, "message": "Closed.", "data": {}}), 200
+
+
+@app.teardown_request
+def teardown_request_func(error=None):
+    if app.config['TEARDOWN']:
+        console.log("[bold green][Flask][/] [bold red]Shutting down the server...[/]")
+        os.kill(os.getpid(), signal.SIGINT)
 
 
 # ------------------------------------------------------------------------------------
@@ -93,7 +101,8 @@ def after_request_func(response):
 def refresh_if_needed() -> None:
     if time.time() - app.config['LAST_REQUEST_TIME'] > app.config['MAX_IDLE_SECONDS']:
         if client:
-            console.log(f"[bold green][Flask][/] [bold yellow]Last request time: {time.strftime('%x %X', time.localtime(app.config['LAST_REQUEST_TIME']))}. Refreshing...[/]")
+            console.log(f"[bold green][Flask][/] [bold]Last request time: {time.strftime('%x %X', time.localtime(app.config['LAST_REQUEST_TIME']))}.[/]")
+            console.log(f"[bold green][Flask][/] [bold yellow]Refreshing...[/]")
             client.refresh_page()
 
 
