@@ -1,7 +1,6 @@
 
 # custom configuration file
 client_config.yaml
-sync*.sh
 utils/
 
 # Byte-compiled / optimized / DLL files
