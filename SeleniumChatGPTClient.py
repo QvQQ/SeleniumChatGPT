@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding=utf-8 -*-
+import re
+
 import requests
+import yaml
 from box import Box
 from typing import Literal, Optional
 from rich.console import Console
@@ -95,11 +98,12 @@ class SeleniumChatGPTClient:
         else:
             self._handle_response(response)
 
-    def chat(self, question: str) -> str:
+    def chat(self, question: str, json: bool = False) -> str | dict:
         """
         Chat with SeleniumChatGPT client on the server.
 
         :param question: Text to send to the client.
+        :param json: If True, the response will be transformed into a JSON dict.
         :return: Answer from the response.
         """
         try:
@@ -108,8 +112,25 @@ class SeleniumChatGPTClient:
             self._console.log(f"[red]Request Error: {repr(e)}[/]")
             raise
         else:
-            data = self._handle_response(response)
-            return data.data.answer
+            answer = self._handle_response(response).data.answer
+
+            if not json:
+                return answer
+
+            try:
+                re_text = re.findall(r'{[\s\S]*}', answer)
+                json_text = re_text[0]
+                json_dict = yaml.safe_load(json_text)
+
+                return json_dict
+            except IndexError as e:
+                self._console.print(f"\n !!! [bold red] 发生错误(IndexError): {repr(e)}[/bold red] !!!")
+                self._console.print(f'[cyan]re_text: {re_text}[/cyan]')  # noqa
+                raise e
+            except yaml.YAMLError as e:
+                self._console.print(f"\n !!! [bold red] 发生错误(YAMLError): {repr(e)}[/bold red] !!!")
+                self._console.print(f'[cyan]json_text: {json_text}[/cyan]')  # noqa
+                raise e
 
     def reset_to_specified_mode(self, model: Literal['GPT-4o', 'GPT-4o mini', 'GPT-4'], temporary_mode: bool = True):
         try:
