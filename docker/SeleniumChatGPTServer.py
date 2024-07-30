@@ -9,7 +9,8 @@ from typing import Optional
 
 # for logging
 import logging
-from rich.console import Console
+
+import rich
 from rich.logging import RichHandler
 
 # others
@@ -26,14 +27,15 @@ client: Optional[SeleniumChatGPT] = None
 
 # ------------------------------------------------------------------------------------
 # 创建一个Rich的Console对象
-console = Console(width=104)
+console = rich.get_console()
+console.width = 104
 
 # 配置日志，使用RichHandler
 logging.basicConfig(
     level="INFO",  # 设置日志级别
     format="%(message)s",  # 设置日志格式
     datefmt="%x %X",  # 设置时间格式
-    handlers=[RichHandler(console=console, rich_tracebacks=True, markup=True, show_path=False)]  # 使用RichHandler
+    handlers=[RichHandler(rich_tracebacks=True, markup=True, show_path=False)]  # 使用RichHandler
 )
 
 # ------------------------------------------------------------------------------------

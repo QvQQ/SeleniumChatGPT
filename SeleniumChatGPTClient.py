@@ -3,10 +3,10 @@
 import re
 
 import requests
+import rich
 import yaml
 from box import Box
 from typing import Literal, Optional
-from rich.console import Console
 
 
 class SeleniumChatGPTClient:
@@ -23,14 +23,12 @@ class SeleniumChatGPTClient:
         user_data_dir: Optional[str] = None,
         base_url: str = 'http://localhost:15001',
         timeout: int = 300,
-        console: Console = None
     ):
         """
         Initialize the client with the base URL of the server.
 
         :param base_url: The base URL of the server, e.g. "http://localhost:15001".
         :param timeout: Timeout for requests (in seconds).
-        :param console: The console instance used to log.
         """
         self._email, self._password = email, password
         self._login_type = login_type
@@ -40,7 +38,7 @@ class SeleniumChatGPTClient:
 
         self._base_url = base_url
         self._timeout = timeout
-        self._console = console or Console()
+        self._console = rich.get_console()
 
     def _handle_response(self, response: requests.Response) -> Box:
         """
@@ -124,11 +122,11 @@ class SeleniumChatGPTClient:
 
                 return json_dict
             except IndexError as e:
-                self._console.print(f"\n !!! [bold red] 发生错误(IndexError): {repr(e)}[/bold red] !!!")
+                self._console.print(f"\n !!! [bold red] 未从回复中找到JSON文本: {repr(e)}[/bold red] !!!")
                 self._console.print(f'[cyan]re_text: {re_text}[/cyan]')  # noqa
                 raise e
             except yaml.YAMLError as e:
-                self._console.print(f"\n !!! [bold red] 发生错误(YAMLError): {repr(e)}[/bold red] !!!")
+                self._console.print(f"\n !!! [bold red] 解析JSON格式时出错: {repr(e)}[/bold red] !!!")
                 self._console.print(f'[cyan]json_text: {json_text}[/cyan]')  # noqa
                 raise e
 
@@ -184,7 +182,7 @@ if __name__ == '__main__':
     # read configuration
     config = Box.from_yaml(filename='./client_config.yaml')
 
-    console = Console()
+    console = rich.get_console()
     client = SeleniumChatGPTClient(
         email=config.email,
         password=config.password,
@@ -193,8 +191,7 @@ if __name__ == '__main__':
         headless=config.headless,
         user_data_dir=config.user_data_dir,
         base_url=config.base_url,
-        timeout=300,
-        console=console
+        timeout=300
     )
 
     client.start_client()
@@ -204,7 +201,6 @@ if __name__ == '__main__':
     # client.reset_to_specified_mode(model='GPT-4o', temporary_mode=True)
 
     # for REPL
-    from rich.console import Console
     from rich.panel import Panel
     from rich.markdown import Markdown
 
