@@ -625,7 +625,8 @@ class SeleniumChatGPT:
                     'NormalMessage',
                     # 'ErrorMessage',
                     'RegenerateButton'
-                ]
+                ],
+                timeout_duration=180
             ):
                 case ('NormalMessage', _):
                     # 情景一：开始正常生成消息
@@ -672,6 +673,7 @@ class SeleniumChatGPT:
                     self._helper.save_debug_screenshot('RegenerateButton')
                     self._logger.warning('[bold yellow]Regenerating...[/]')
                     regenerate_button.click()
+                    # TODO: 这里似乎要先等待原本的 inner_div 中的元素消失，然后再 continue 重新等待，否则会一直点击
                     continue
         else:
             # 最大尝试次数尝试完毕，仍然没有成功生成消息
@@ -768,7 +770,8 @@ class SeleniumChatGPT:
                     'NormalMessage',
                     # 'ErrorMessage',
                     'RegenerateButton'
-                ]
+                ],
+                timeout_duration=180
             ):
                 case ('NormalMessage', _):
                     # 情景一：开始正常生成消息
@@ -815,6 +818,7 @@ class SeleniumChatGPT:
                     self._helper.save_debug_screenshot('RegenerateButton')
                     self._logger.warning('[bold yellow]Regenerating...[/]')
                     regenerate_button.click()
+                    # TODO: 这里似乎要先等待原本的 inner_div 中的元素消失，然后再 continue 重新等待，否则会一直点击
                     continue
         else:
             # 最大尝试次数尝试完毕，仍然没有成功生成消息
