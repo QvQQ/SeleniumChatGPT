@@ -148,6 +148,7 @@ class SeleniumChatGPT:
         if user_data_dir:
             profile_name = 'Profile_1'
             user_data_dir = os.path.abspath(user_data_dir)
+            os.makedirs(user_data_dir, exist_ok=True)
             self._logger.info(f"[cyan]Using user_data_dir: {user_data_dir} with profile '{profile_name}'[/]")
 
             options.add_argument(f'--user-data-dir={user_data_dir}')
