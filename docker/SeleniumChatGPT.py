@@ -504,6 +504,11 @@ class SeleniumChatGPT:
         # Navigating to the specified URL with parameters
         self._browser.get(url)
 
+        # TODO: 检查是否切换到了对应模型，或有了对应的 popup 提示气泡
+        '''
+        <div class="absolute bottom-full left-0 right-0 z-20"><div class="relative h-full w-full"><div class="flex flex-col gap-3.5 pb-3.5 pt-2"><div style="opacity: 1; transform: translateY(0px);"><div class="flex w-full items-start gap-4 rounded-2xl border border-token-border-light bg-token-main-surface-primary py-4 pl-5 pr-3 text-sm text-token-text-primary [text-wrap:pretty] dark:border-transparent dark:bg-token-main-surface-secondary md:items-center lg:mx-auto shadow-xxs"><div class="mt-1.5 flex grow flex-col items-start gap-4 md:mt-0 md:flex-row md:items-center md:justify-between md:gap-8"><div class="flex max-w-none flex-col"><div class="font-bold text-token-text-primary">You’ve hit the Plus plan limit for GPT-4.</div><div class="text-token-text-secondary">New responses will use GPT-4o until your limit resets after 2:24 AM.</div></div></div><div class="flex shrink-0 items-center gap-2"><button class="flex h-8 w-8 items-center justify-center rounded-full bg-transparent hover:bg-token-main-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-token-text-quaternary focus-visible:ring-offset-1 focus-visible:ring-offset-transparent dark:hover:bg-token-main-surface-tertiary"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" class="icon-md"><path fill="currentColor" fill-rule="evenodd" d="M5.636 5.636a1 1 0 0 1 1.414 0l4.95 4.95 4.95-4.95a1 1 0 0 1 1.414 1.414L13.414 12l4.95 4.95a1 1 0 0 1-1.414 1.414L12 13.414l-4.95 4.95a1 1 0 0 1-1.414-1.414l4.95-4.95-4.95-4.95a1 1 0 0 1 0-1.414" clip-rule="evenodd"></path></svg></button></div></div></div></div></div></div>
+        '''
+
         # Logging the completion of the mode reset operation
         self._logger.info(f"[bold]Successfully reset to [green]{model}[/] model with temporary mode {'[green]ON[/]' if temporary_mode else '[red]OFF[/]'}.[/]")
 
@@ -539,6 +544,7 @@ class SeleniumChatGPT:
         self._logger.info(f"[bold]Switching model to '{target_model}'...[/]")
 
         # 点击模型，进行切换
+        # TODO: 需要判断是否可点击状态，否则该模型暂时不可用
         self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__model_menuitem_div.format(target_model), label=target_model)
 
         self._logger.info(f"[bold]Model changed to '{target_model}'.[/]")
@@ -675,6 +681,7 @@ class SeleniumChatGPT:
                     self._logger.warning('[bold yellow]Regenerating...[/]')
                     regenerate_button.click()
                     # TODO: 这里似乎要先等待原本的 inner_div 中的元素消失，然后再 continue 重新等待，否则会一直点击
+                    # TODO: Regenerate 点击后也是需要一定时间反应的
                     continue
         else:
             # 最大尝试次数尝试完毕，仍然没有成功生成消息
@@ -820,6 +827,7 @@ class SeleniumChatGPT:
                     self._logger.warning('[bold yellow]Regenerating...[/]')
                     regenerate_button.click()
                     # TODO: 这里似乎要先等待原本的 inner_div 中的元素消失，然后再 continue 重新等待，否则会一直点击
+                    # TODO: Regenerate 点击后也是需要一定时间反应的
                     continue
         else:
             # 最大尝试次数尝试完毕，仍然没有成功生成消息
