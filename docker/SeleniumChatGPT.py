@@ -56,14 +56,14 @@ class SeleniumChatGPT:
     xpath_chat__conversation_turn_divs = "//div[starts-with(@class, 'react-scroll-to-bottom--css')]//div[starts-with(@data-testid, 'conversation-turn-')]"
 
     ## 最后一条会话消息 (assistant) 的 外部 div (包含空、错误、正常三种)
-    xpath_chat__conversation_last_assistant_turn_outer_div = "//div[starts-with(@class, 'react-scroll-to-bottom--css')]//div[starts-with(@data-testid, 'conversation-turn-') and @data-scroll-anchor='true' and //div[@data-message-author-role='assistant']]"
+    xpath_chat__conversation_last_assistant_turn_outer_div = "//div[starts-with(@class, 'react-scroll-to-bottom--css')]//article[starts-with(@data-testid, 'conversation-turn-') and @data-scroll-anchor='true' and //div[@data-message-author-role='assistant']]"
     ## 最后一条会话消息 (assistant) 的 内部 div (正常消息)
     xpath_chat__conversation_last_assistant_turn_inner_div = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[contains(@class, 'markdown')]"
     ## 最后一条会话消息 (assistant) 的 内部 div (错误消息)
     xpath_chat__conversation_error_message_p = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[contains(@class, 'border-token-surface-error')]//p"
 
     ## 指定会话消息 (assistant) 的 外部 div (包含空、错误、正常三种)
-    xpath_chat__conversation_specified_assistant_turn_outer_div = "//div[starts-with(@class, 'react-scroll-to-bottom--css')]//div[@data-testid='conversation-turn-{turn}' and @data-scroll-anchor='true' and //div[@data-message-author-role='assistant']]"
+    xpath_chat__conversation_specified_assistant_turn_outer_div = "//div[starts-with(@class, 'react-scroll-to-bottom--css')]//article[@data-testid='conversation-turn-{turn}' and @data-scroll-anchor='true' and //div[@data-message-author-role='assistant']]"
     ## 指定会话消息 (assistant) 的 内部 div (正常消息)
     xpath_chat__conversation_specified_assistant_turn_inner_div = xpath_chat__conversation_specified_assistant_turn_outer_div + "//div[contains(@class, 'markdown')]"
     ## 指定会话消息 (assistant) 的 内部 div (错误消息)
