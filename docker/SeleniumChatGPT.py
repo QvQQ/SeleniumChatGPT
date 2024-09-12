@@ -38,15 +38,16 @@ class SeleniumChatGPT:
     xpath_chat__welcome_login_button = '//button[@data-testid="welcome-login-button" and ./div[text()="Log in"]]'
 
     ## 底部输入框
-    xpath_chat__prompt_textarea = '//textarea[@id="prompt-textarea"]'
+    # xpath_chat__prompt_textarea = '//textarea[@id="prompt-textarea"]'
+    xpath_chat__prompt_textarea = '//div[@id="prompt-textarea"]'  # 2024.09.12 修改
     ## 输入框右边的发送按钮
     # xpath_chat__send_button_enabled  = '//button[contains(@data-testid, "send-button") and not(@disabled)]'
-    xpath_chat__send_button_enabled  = "//textarea[@id='prompt-textarea']/ancestor::div[1]/following-sibling::button[not(@disabled) and ./*[local-name()='svg']/*[local-name()='path']][1]"
+    xpath_chat__send_button_enabled  = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::button[not(@disabled) and ./*[local-name()='svg']/*[local-name()='path']][1]"
     # xpath_chat__send_button_disabled = '//button[contains(@data-testid, "send-button") and @disabled]'
-    xpath_chat__send_button_disabled  = "//textarea[@id='prompt-textarea']/ancestor::div[1]/following-sibling::button[@disabled and ./*[local-name()='svg']/*[local-name()='path']][1]"
+    xpath_chat__send_button_disabled  = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::button[@disabled and ./*[local-name()='svg']/*[local-name()='path']][1]"
     ## 输入框右边的停止生成按钮
     # xpath_chat__stop_button = '//button[contains(@data-testid, "stop-button")]'
-    xpath_chat__stop_button = "//textarea[@id='prompt-textarea']/ancestor::div[1]/following-sibling::button[not(@disabled) and ./*[local-name()='svg']/*[local-name()='rect']][1]"
+    xpath_chat__stop_button = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::button[not(@disabled) and ./*[local-name()='svg']/*[local-name()='rect']][1]"
     ## 生成出现错误时的 Regenerate 按钮
     xpath_chat__error_regenerate_button = '//button[div[text()="Regenerate"]]'
     ## 滚动到底部按钮
@@ -70,7 +71,7 @@ class SeleniumChatGPT:
     xpath_chat__conversation_specified_error_message_p = xpath_chat__conversation_specified_assistant_turn_outer_div + "//div[contains(@class, 'border-token-surface-error')]//p"
 
     ## 最后一条会话消息 (assistant) 底部的四个按钮
-    xpath_chat__conversation_last_assistant_turn_action_buttons = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[count(span)=4]/span"
+    xpath_chat__conversation_last_assistant_turn_action_buttons = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[count(span)=3]/span"
     ## 最后一条会话消息 (assistant) 底部的复制按钮 (假定在第 2 个)
     xpath_chat__conversation_last_assistant_turn_copy_button = xpath_chat__conversation_last_assistant_turn_action_buttons + "[2]"
     ## 最后一条会话消息 (assistant) 底部的重新生成按钮 (假定在第 3 个)
@@ -87,7 +88,7 @@ class SeleniumChatGPT:
     xpath_chat__model_temporary_div = "//div[@role='menu' and @data-state='open']//div[@role='menuitem']//button[@role='switch' and @aria-label='Temporary']"
 
     ## 开启新会话按钮 (假定是模型选择菜单的下一个兄弟节点)
-    xpath_chat__new_chat_div = xpath_chat__model_menu_div + '/following-sibling::*[1]//button'
+    xpath_chat__new_chat_div = xpath_chat__model_menu_div + '/ancestor::div[1]/following-sibling::*[1]//button'
 
     ## 临时会话标识
     xpath_chat__temporary_chat_in_presentation_div = "//div[@role='presentation']//div[text()='Temporary Chat']"
@@ -174,7 +175,7 @@ class SeleniumChatGPT:
         options.add_argument("--disable-autofill")
 
         # 设置窗口大小
-        options.add_argument("--window-size=640,660")
+        options.add_argument("--window-size=636,664")
 
         # 设置窗口初始位置
         options.add_argument("--window-position=0,0")
@@ -223,6 +224,7 @@ class SeleniumChatGPT:
             raise e
 
         # 设置页面加载超时
+        self._browser.implicitly_wait(2)
         self._browser.set_page_load_timeout(120)
         self._logger.info('[cyan]Page load timeout set to 120.[/]')
 
