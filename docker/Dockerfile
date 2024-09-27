@@ -44,14 +44,12 @@ ENV PATH="${PATH}:/home/seluser/.local/bin"
 #     && pip config set global.index-url 'https://pypi.tuna.tsinghua.edu.cn/simple' \
 #     && pip install --no-cache-dir -r /home/seluser/requirements.txt
 
-    # && sudo apt-get install -y expect xclip python3-lib2to3=3.10.8-1~22.04 python3.11-venv \
 RUN sudo apt-get update \
     && sudo apt-get install -y expect xclip python3-venv \
     && sudo rm -rf /var/lib/apt/lists/* \
     && sudo apt autoremove -y
 
 # 更改 superviosr 的运行命令
-#    -e '\|command=bash -c "/opt/bin/start-selenium-standalone.sh;|a environment=DISPLAY=":99.0",TERM="xterm-256color"' \
 RUN sudo sed -i \
     -e '\|command=bash -c "/opt/bin/start-selenium-standalone.sh;|a environment=TERM="xterm-256color"' \
     -e 's|command=bash -c "/opt/bin/start-selenium-standalone.sh;|command=bash -ic "sudo -E unbuffer /home/seluser/venv/bin/python3 SeleniumChatGPTServer.py;|' \

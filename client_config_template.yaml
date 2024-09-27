@@ -1,0 +1,19 @@
+# docker 容器的地址，如果是本地
+# e.g. http://127.0.0.1:15001
+base_url: ''
+
+# 登录方式。微软账号选'Microsoft'，OpenAI账号选'OpenAI'
+login_type: 'Microsoft'
+
+# 账号对应的邮箱及密码
+email: ''
+password: ''
+
+# 用来解决 CloudFlare 验证的服务，目前未用到
+capsolver_client_key: null
+
+# 浏览器是否是 headless 模式。建议选 false，否则可能弹 CloudFLare 验证
+headless: false
+
+# Chrome 的用户数据目录的名字
+user_data_dir: 'user_data_dir'

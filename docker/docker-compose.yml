@@ -1,4 +1,4 @@
-version: '3.8'
+#version: '3.8'
 
 services:
   selenium-gpt:
@@ -9,13 +9,24 @@ services:
     ports:
       - "7900:7900"    # noVNC
       - "15001:15001"  # SeleniumChatGPTServer service listen port
+
     environment:
+
+      # 后端监听地址
       PORT: 15001
-      # :99.0 表示使用内置的 xvfb 虚拟桌面环境；在 Linux 系统上也可以通过 xhost 添加本机 X 服务器的权限
+
+      # :99.0 表示使用内置的 xvfb 虚拟桌面环境
+      # 在 Linux 系统上也可以通过 xhost 添加本机 X 服务器的权限
       DISPLAY: ":99.0"  
+
       # 使用的代理地址
       # HTTP_PROXY: ""
+      
     volumes:
+
+      # Chrome 的用户数据目录
       - ./chrome_user_data:/home/seluser/user_data_dir
+
+      # 当元素未找到时，存储 debug 截图的目录名称
       - ./debug:/home/seluser/debug
 
