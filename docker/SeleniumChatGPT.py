@@ -228,7 +228,7 @@ class SeleniumChatGPT:
             raise e
 
         # 设置页面加载超时
-        self._browser.implicitly_wait(2)
+        self._browser.implicitly_wait(1)
         self._browser.set_page_load_timeout(120)
         self._logger.info('[cyan]Page load timeout set to 120.[/]')
 
