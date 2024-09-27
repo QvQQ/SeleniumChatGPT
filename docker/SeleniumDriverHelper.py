@@ -211,6 +211,48 @@ class SeleniumDriverHelper:
             self.save_debug_screenshot(f'wait_for_mutually_exclusive_elements-[{",".join(labels)}]')
             raise  # Re-raise the exception if ignore_timeout is False
 
+    def wait_until_element_count_reaches(
+        self, by: str, query: str,
+        target_count: int,
+        timeout_duration: int = 60, ignore_timeout: bool = False,
+        *, label: str
+    ) -> bool:
+        """
+        Waits until the number of elements specified by the query reaches the target count.
+
+        This function continuously checks for the presence of elements and compares their count
+        to the target count. Once the count matches the target, the function returns True.
+
+        Args:
+            by (str): The method used to locate the elements (e.g., By.XPATH, By.CSS_SELECTOR).
+            query (str): The query string to locate the elements.
+            target_count (int): The number of elements expected to appear.
+            timeout_duration (int, optional): The total wait time before the timeout exception. Default: 60.
+            ignore_timeout (bool): If True, no exception is raised if the count does not reach target after timeout.
+            label (str): Description used for logging purposes.
+
+        Returns:
+            bool: True if the element count reaches the target count, False if not.
+        """
+        self.logger.info(f"Waiting for the number of elements '{label}' to reach {target_count}.")
+        try:
+            # Use WebDriverWait and lambda function to wait until the count of elements matches the target_count
+            WebDriverWait(
+                self.browser,
+                timeout_duration
+            ).until(
+                lambda driver: len(driver.find_elements(by, query)) == target_count
+            )
+            self.logger.info(f"Element count for '{label}' reached {target_count}.")
+            return True
+        except Exceptions.TimeoutException:
+            if ignore_timeout:
+                self.logger.warning(f"Timeout reached but ignoring since ignore_timeout is True for '{label}'.")
+                return False
+            self.logger.error(f"Element count for '{label}' did not reach {target_count} within {timeout_duration}s.")
+            self.save_debug_screenshot(f'wait_until_element_count_reaches-{label}')
+            raise  # Re-raise the exception if ignore_timeout is False
+
     def _click(
         self,
         element: WebElement,

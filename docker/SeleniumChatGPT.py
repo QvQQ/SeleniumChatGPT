@@ -33,7 +33,7 @@ class SeleniumChatGPT:
     # !!! data-testid 可能会变化 !!!
     # 聊天页面 ############################################################
     ## 顶部右侧的登录按钮
-    xpath_chat__login_button = '//button[not(@data-testid) and ./div[text()="Log in"]]'
+    xpath_chat__login_button = '//button[./div[text()="Log in"]]'
     ## Welcome 弹出框界面的登录按钮
     xpath_chat__welcome_login_button = '//button[@data-testid="welcome-login-button" and ./div[text()="Log in"]]'
 
@@ -71,19 +71,23 @@ class SeleniumChatGPT:
     xpath_chat__conversation_specified_error_message_p = xpath_chat__conversation_specified_assistant_turn_outer_div + "//div[contains(@class, 'border-token-surface-error')]//p"
 
     ## 最后一条会话消息 (assistant) 底部的四个按钮
-    xpath_chat__conversation_last_assistant_turn_action_buttons = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[count(span)=3]/span"
+    xpath_chat__conversation_last_assistant_turn_action_buttons = xpath_chat__conversation_last_assistant_turn_outer_div + "//div[count(span[not(contains(@class, 'hidden'))])=3]/span[not(contains(@class, 'hidden'))]"
     ## 最后一条会话消息 (assistant) 底部的复制按钮 (假定在第 2 个)
     xpath_chat__conversation_last_assistant_turn_copy_button = xpath_chat__conversation_last_assistant_turn_action_buttons + "[2]"
     ## 最后一条会话消息 (assistant) 底部的重新生成按钮 (假定在第 3 个)
     xpath_chat__conversation_last_assistant_turn_regenerate_button = xpath_chat__conversation_last_assistant_turn_action_buttons + "[3]"
 
     ## 模型选择菜单
-    xpath_chat__model_menu_div = "//div[@aria-haspopup='menu' and starts-with(@id, 'radix-:')]"
+    xpath_chat__model_menu_div = "//button[@aria-haspopup='menu' and starts-with(@aria-label, 'Model selector')]"
     ## 模型选择菜单当前显示的模型名
     xpath_chat__model_menu_displayed_name_span = xpath_chat__model_menu_div + "/div/span"
-    ## 模型选择菜单中的模型名
-    xpath_chat__model_menuitem_div = "//div[@role='menu' and @data-state='open']//div[@role='menuitem']//div[text()='{}']"
-    xpath_chat__model_menuitem_divs = "//div[@role='menu' and @data-state='open']//div[@role='menuitem']//div[not(@class) and text()]"
+    ## 模型选择菜单弹出菜单框
+    xpath_chat__model_popup_menu_div = "//div[@data-radix-popper-content-wrapper]"
+    ## 模型选择菜单中的模型名（当前可用的，没有被嵌套在一个 span data-state="close" 标签中）
+    xpath_chat__model_menuitem_div = xpath_chat__model_popup_menu_div + "//div[not(ancestor::span[@data-state='closed']) and @role='menuitem']//div[text()='{}']"
+    xpath_chat__model_menuitem_divs = xpath_chat__model_popup_menu_div + "//div[not(ancestor::span[@data-state='closed']) and @role='menuitem']//div[not(@class) and text()]"
+    ## 模型选择菜单中的折叠菜单
+    xpath_chat__model_collapsed_menu_div = "//div[text()='More models']"
     ## 模型选择菜单中的临时会话开关
     xpath_chat__model_temporary_div = "//div[@role='menu' and @data-state='open']//div[@role='menuitem']//button[@role='switch' and @aria-label='Temporary']"
 
@@ -531,22 +535,30 @@ class SeleniumChatGPT:
 
         self._logger.info('[bold]Obtaining available models...[/]')
 
-        # 点击模型选择
+        # 点击模型选择（外层模型）
         self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_menu_div, label='Model Menu')
         self._helper.wait_until_appear(By.XPATH, self.xpath_chat__model_menuitem_divs, label='Model Menu Item')
+
+        # 点击模型选择（折叠模型）
+        self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_collapsed_menu_div, label='More models')
+        self._helper.wait_until_element_count_reaches(By.XPATH, self.xpath_chat__model_popup_menu_div, target_count=2, label='Popup Menu Count')
 
         # 获取所有模型的 div
         models = self._browser.find_elements(By.XPATH, self.xpath_chat__model_menuitem_divs)
 
         # 提取所有模型名称（直接用.text的话会获取子div中的文本）
         MODEL_NAMES = [self._browser.execute_script("return arguments[0].childNodes[0].nodeValue;", x) for x in models]
+
+        # 点击模型选择
+        self._helper.wait_until_appear_then_click(By.XPATH, self.xpath_chat__model_collapsed_menu_div, label='More models')
+
+        # 进行一个断言
         assert target_model in MODEL_NAMES, f"Invalid model name: {target_model}, should be one of the following: {MODEL_NAMES}"
 
         self._logger.info(f"Available models: {MODEL_NAMES}")
         self._logger.info(f"[bold]Switching model to '{target_model}'...[/]")
 
         # 点击模型，进行切换
-        # TODO: 需要判断是否可点击状态，否则该模型暂时不可用
         self._helper.find_then_click_or_fail(By.XPATH, self.xpath_chat__model_menuitem_div.format(target_model), label=target_model)
 
         self._logger.info(f"[bold]Model changed to '{target_model}'.[/]")

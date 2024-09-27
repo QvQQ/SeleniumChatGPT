@@ -17,11 +17,11 @@ WORKDIR /home/seluser/
 USER seluser
 
 # 更换镜像源
-RUN sudo sed -i \
-    -e 's|http://ports.ubuntu.com/ubuntu-ports|https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports|g' \
-    -e 's|http://archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
-    -e 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
-    /etc/apt/sources.list
+# RUN sudo sed -i \
+#     -e 's|http://ports.ubuntu.com/ubuntu-ports|https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports|g' \
+#     -e 's|http://archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
+#     -e 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+#     /etc/apt/sources.list
 
 # 安装语言包、设置 locale 为中文
 #RUN sudo apt-get update \
@@ -30,9 +30,9 @@ RUN sudo sed -i \
 #    && sudo locale-gen zh_CN.UTF-8 \
 #    && sudo update-locale LANG=zh_CN.UTF-8
 
-ENV LANG zh_CN.UTF-8
-ENV LANGUAGE zh_CN:zh
-ENV LC_ALL zh_CN.UTF-8
+# ENV LANG=zh_CN.UTF-8
+# ENV LANGUAGE=zh_CN:zh
+# ENV LC_ALL=zh_CN.UTF-8
 ENV PATH="${PATH}:/home/seluser/.local/bin"
 
 # 安装 pip 并安装 python 依赖
@@ -44,8 +44,9 @@ ENV PATH="${PATH}:/home/seluser/.local/bin"
 #     && pip config set global.index-url 'https://pypi.tuna.tsinghua.edu.cn/simple' \
 #     && pip install --no-cache-dir -r /home/seluser/requirements.txt
 
+    # && sudo apt-get install -y expect xclip python3-lib2to3=3.10.8-1~22.04 python3.11-venv \
 RUN sudo apt-get update \
-    && sudo apt-get install -y expect xclip python3-lib2to3=3.10.8-1~22.04 python3.11-venv \
+    && sudo apt-get install -y expect xclip python3-venv \
     && sudo rm -rf /var/lib/apt/lists/* \
     && sudo apt autoremove -y
 
@@ -68,8 +69,7 @@ RUN python3 -m venv /home/seluser/venv \
 RUN sudo sed -i \
     -e '/options.add_argument("--window-size=1920,1080")/d' \
     -e '/options.add_argument("--start-maximized")/d' \
-    /home/seluser/venv/lib/python3.11/site-packages/undetected_chromedriver/__init__.py
-
+    /home/seluser/venv/lib/python3.12/site-packages/undetected_chromedriver/__init__.py
 
 # 运行 undetected_chromedriver 的 Patcher 自动下载 Chromedriver
 RUN sudo /home/seluser/venv/bin/python3 -c "from undetected_chromedriver import Patcher; import logging; logging.basicConfig(level='DEBUG'); Patcher(executable_path='/usr/bin/chromedriver').auto()"

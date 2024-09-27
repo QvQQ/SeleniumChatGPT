@@ -11,10 +11,9 @@ services:
       - "15001:15001"  # SeleniumChatGPTServer service listen port
     environment:
       PORT: 15001
-      # DISPLAY: "orangepi-2.local:0"
-      # DISPLAY: "192.168.1.42:0"
-      DISPLAY: ":99.0"
-      # HTTP_PROXY: ""
+      # :99.0 表示使用内置的 xvfb 虚拟桌面环境；在 Linux 系统上也可以通过 xhost 添加本机 X 服务器的权限
+      DISPLAY: ":99.0"  
+      # 使用的代理地址
       # HTTP_PROXY: ""
     volumes:
       - ./chrome_user_data:/home/seluser/user_data_dir
