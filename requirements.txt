@@ -2,3 +2,4 @@ requests
 rich
 pyyaml
 python-box
+prompt_toolkit
