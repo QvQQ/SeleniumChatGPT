@@ -43,10 +43,12 @@ class SeleniumChatGPT:
     ## 输入框右边的发送按钮
     # xpath_chat__send_button_enabled  = '//button[contains(@data-testid, "send-button") and not(@disabled)]'
     # xpath_chat__send_button_enabled  = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::button[not(@disabled) and ./*[local-name()='svg']/*[local-name()='path']][1]"
-    xpath_chat__send_button_enabled = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::div//button[not(@disabled) and @aria-label='Send prompt']"
+    # xpath_chat__send_button_enabled = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::div//button[not(@disabled) and @aria-label='Send prompt']"
+    xpath_chat__send_button_enabled = "//button[not(@disabled) and @aria-label='Send prompt']"
     # xpath_chat__send_button_disabled = '//button[contains(@data-testid, "send-button") and @disabled]'
     # xpath_chat__send_button_disabled  = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::button[@disabled and ./*[local-name()='svg']/*[local-name()='path']][1]"
-    xpath_chat__send_button_disabled = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::div//button[@disabled and @aria-label='Send prompt']"
+    # xpath_chat__send_button_disabled = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::div//button[@disabled and @aria-label='Send prompt']"
+    xpath_chat__send_button_disabled = "//button[@disabled and @aria-label='Send prompt']"
     ## 输入框右边的停止生成按钮
     # xpath_chat__stop_button = '//button[contains(@data-testid, "stop-button")]'
     # xpath_chat__stop_button = xpath_chat__prompt_textarea + "/ancestor::div[2]/following-sibling::button[not(@disabled) and ./*[local-name()='svg']/*[local-name()='rect']][1]"
